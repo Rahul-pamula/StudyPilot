@@ -2,17 +2,19 @@
 
 ## 1. Dynamic Priority Score (Adjusted for Sleep Depletion)
 
-A static priority formula based solely on exam weight is pedagogically flawed because it fails to account for the student’s actual capacity for memory consolidation. Sleep deprivation severely impairs cognitive retention and active recall performance. 
+A static priority formula based solely on exam weight is pedagogically flawed because it fails to account for the student’s actual capacity for memory consolidation. Sleep deprivation impairs cognitive retention and active recall performance. 
 
 The scheduling engine must scale down the priority index of highly complex tasks when the student is sleep-deprived, shifting focus to lower-difficulty reviews or prompting recovery.
 
-**The Advanced Priority Formula:**
+**The Advanced Priority Formula (Linear Scaling):**
 
-$$Priority_{adj} = \left( (Exam Weight \times 2) + Lecture Hours \right) \times \left( \frac{Sleep Hours}{8.0} \right)^2$$
+A sleep-deprived student can still learn, just slower. We use linear scaling with a hard floor of 0.5 (50% efficiency) rather than aggressive exponential punishment.
 
-Where $Sleep Hours$ represents the value captured during the morning onboarding slider, capped at 8.0 hours. 
-
-**Example:** If a student logs only 5.0 hours of sleep, their effective prioritization index scales down by approximately 60%, automatically realigning the daily planner away from heavy new topics to lighter, consolidated practice problems to prevent cognitive burnout.
+```typescript
+const sleepMultiplier = Math.max(0.5, Math.min(1.0, sleepHours / 8.0));
+const priorityAdj = ((examWeight * 2) + lectureHours) * sleepMultiplier;
+```
+*At 4 hours sleep, the multiplier is 0.5 (50% reduction). At 8+ hours, it is 1.0. Sleeping 12 hours provides no extra bonus.*
 
 ---
 

@@ -1,63 +1,110 @@
-# PART J: TECHNICAL IMPLEMENTATION DETAILS (Algorithms & Edge Constraints)
+# PART J: TECHNICAL IMPLEMENTATION DETAILS (Algorithms & Fallbacks)
 
 This section outlines the exact technical solutions to the most complex architectural challenges in StudyPilot V4.
 
-## J.1 Vercel Edge Runtime & Streaming Fallbacks
+## J.1 The PDF Text Extraction Pipeline (OCR & pdf.js Fallback)
 
-To bypass the 15-second serverless execution limits and 4.5MB payload limits on Vercel, all long-running orchestrations must be moved to asynchronous background jobs (or GCP/AWS VMs), while the Next.js Edge Runtime is reserved strictly for streaming the **Vercel AI SDK**. `LangChain JS` is explicitly banned from this codebase.
-
----
-
-## J.2 Advanced Spaced Repetition Algorithm
-
-The basic SM-2 interval multiplier is modified to calculate the next review date based on a combination of retrieval response speed, three-tier rubric scores, and physical rest metrics.
-
-Let the next review interval ($I_{n+1}$, in days) be calculated as:
-$$I_{n+1} = I_n \times EF \times \phi(R, S, T)$$
-
-Where:
-- $I_n$ is the current review interval (minimum 1 day).
-- $EF$ is the Easiness Factor of the topic, calibrated between 1.3 and 2.5.
-- $\phi(R, S, T)$ is the dynamic cognitive modulation function defined as:
-  
-  $$\phi(R, S, T) = \left( \frac{R}{100} \right) \times \left( \frac{S}{8.0} \right) \times \left( 1.0 - \min\left(0.3, \frac{T}{60000}\right) \right)$$
-
-Where:
-- $R$ is the final evaluation score (0 - 100) provided by the LLM grading ensemble.
-- $S$ is the sleep duration (0 - 12 hours) from the previous night.
-- $T$ is the response time in milliseconds. Slower response times ($T > 20,000$ ms) indicate retrieval difficulty.
-
-**Result:** If a student achieves a high accuracy score ($R = 90$) but did so with extreme hesitation ($T = 45,000$ ms) under sleep deprivation ($S = 5.5$ hours), the interval multiplier $\phi$ automatically decreases below 1.0. This forces an early review of the concept.
-
----
-
-## J.3 The Groq Prompt Engineering (Core Extractor)
-
-The prompt that parses the exam is the most critical code in the application. It must extract `keywords` so that offline local models can generate questions without needing the cloud.
+Relying solely on `pdf-parse` will fail on older, scanned university exams. Furthermore, `unpdf` may have untested Edge constraints. StudyPilot utilizes a layered extraction pipeline to guarantee parsing.
 
 ```typescript
-export const EXAM_ANALYSIS_PROMPT = `
-You are analyzing a university exam paper. Extract topics that appear in questions.
+// utils/pdf-extractor.ts
+import { getDocument } from 'pdfjs-dist'; // Standard browser/edge fallback
+import { createWorker } from 'tesseract.js';
 
-Rules:
-1. A "topic" is a specific concept (e.g., "Newton's Second Law")
-2. Count how many questions reference each topic
-3. Estimate exam weight percentage based on points per question
-4. Return ONLY valid JSON, no explanation
+async function extractPDFText(buffer: Buffer): Promise<string> {
+  try {
+    // Try primary extraction
+    const data = await tryExtractText(buffer);
+    if (data.length > 500 && !hasGarbledText(data)) return data;
+  } catch (e) {
+    console.log('Text extraction failed, falling back to OCR');
+  }
+  
+  // Fallback to OCR for scanned PDFs (runs locally or isolated microservice)
+  const worker = await createWorker('eng');
+  const { data: { text } } = await worker.recognize(buffer);
+  await worker.terminate();
+  
+  return text;
+}
+```
 
-Output format:
-{
-  "topics": [
-    {
-      "name": "string",
-      "questionCount": number,
-      "estimatedWeight": number,
-      "keywords": ["string"] // 3-5 keywords for future offline retrieval/grading
+---
+
+## J.2 Advanced Spaced Repetition Algorithm (Exponential Decay)
+
+The basic SM-2 interval multiplier is modified to calculate the next review date based on a combination of retrieval response speed and physical rest metrics. Taking 60 seconds to answer a recall question means the student doesn't know it. We cap response time at 30 seconds and apply an exponential decay penalty.
+
+```typescript
+const timePenalty = Math.exp(-responseTimeMs / 15000); // 15-second half-life
+// 5 seconds → 0.72 penalty (28% reduction)
+// 15 seconds → 0.37 penalty (63% reduction)
+// 30 seconds → 0.14 penalty (86% reduction)
+```
+
+---
+
+## J.3 Offline Sync Queue
+
+When students study offline (e.g., on a subway or in a library without Wi-Fi), attempts must be queued locally and synced later.
+
+```typescript
+// lib/offline-sync.ts
+class OfflineSyncQueue {
+  private queue: any[] = [];
+  
+  async saveAttempt(attempt: StudyAttempt) {
+    this.queue.push(attempt);
+    await this.persistToIndexedDB(attempt);
+  }
+  
+  async sync() {
+    if (!navigator.onLine) return;
+    
+    for (const attempt of this.queue) {
+      await fetch('/api/study-sessions', {
+        method: 'POST',
+        body: JSON.stringify(attempt)
+      });
     }
-  ]
+    this.queue = [];
+  }
 }
 
-Exam text:
-{{EXAM_TEXT}}
-`;
+// Listen for online event
+window.addEventListener('online', () => syncQueue.sync());
+```
+
+---
+
+## J.4 Web Push Notifications (VAPID + Cron)
+
+```typescript
+// app/api/push/subscribe/route.ts
+import webpush from 'web-push';
+
+webpush.setVapidDetails(
+  'mailto:admin@studypilot.com',
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!
+);
+
+// Scheduled function (runs daily via Vercel Cron Jobs)
+export async function sendDailyReminders() {
+  const dueTopics = await db.exam_topics.findMany({
+    where: { next_review_date: { lte: new Date() }, user: { push_enabled: true } }
+  });
+  
+  for (const topic of dueTopics) {
+    await webpush.sendNotification(
+      topic.user.pushSubscription,
+      JSON.stringify({
+        title: 'Time to Review!',
+        body: `Your spaced repetition for ${topic.topic_name} is due.`,
+        icon: '/icon-192.png',
+        data: { topicId: topic.id }
+      })
+    );
+  }
+}
 ```

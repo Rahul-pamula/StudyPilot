@@ -261,9 +261,9 @@ Every retrieval attempt, successful or failed, is aggressively logged. Failures 
 
 # PART B: DATABASE SCHEMA & SEMANTIC TRACKING
 
-## B.1 Database Schema: pgvector & Trajectory Logging
+## B.1 Database Schema: pgvector, Flashcards & Trajectory Logging
 
-To support true semantic RAG operations and mitigate LLM grading biases (length/sentiment bias), the database utilizes `pgvector` and comprehensive multi-turn trajectory logging.
+To support true semantic RAG operations, offline spaced repetition, and mitigate LLM grading biases, the database utilizes `pgvector` and comprehensive multi-turn trajectory logging.
 
 ```sql
 -- Enable the vector extension for semantic analysis and RAG
@@ -291,7 +291,23 @@ CREATE TABLE public.exam_topics (
     exam_weight_percentage FLOAT,
     user_mastery_level INT DEFAULT 0,
     parent_topic_id UUID REFERENCES exam_topics(id) ON DELETE SET NULL, -- Knowledge graphing
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Flashcards for Spaced Repetition
+CREATE TABLE public.flashcards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    topic_id UUID REFERENCES exam_topics(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    
+    -- SM-2 state
+    ease_factor FLOAT DEFAULT 2.5,
+    repetitions INT DEFAULT 0,
+    last_review_date DATE,
     next_review_date DATE,
+    
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -301,14 +317,23 @@ CREATE TABLE public.study_sessions (
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     topic_id UUID REFERENCES exam_topics(id) ON DELETE CASCADE,
     raw_user_input TEXT,
-    response_duration_ms INT, -- Tracks response speed to measure fatigue
-    comprehensiveness_score FLOAT, -- Rubric dimension 1
-    accuracy_score FLOAT,          -- Rubric dimension 2
-    coherence_score FLOAT,         -- Rubric dimension 3
-    final_evaluation_score FLOAT,  -- Weighted aggregate
-    uncertainty_index FLOAT,       -- Variance across LLM ensemble models
+    response_duration_ms INT,
+    comprehensiveness_score FLOAT,
+    accuracy_score FLOAT,
+    coherence_score FLOAT,
+    final_evaluation_score FLOAT,
+    uncertainty_index FLOAT,
     sleep_hours_previous_night FLOAT,
-    status VARCHAR(30), -- 'COMPLETED', 'FAILED_RETRIEVAL', 'UNCERTAIN_FLAGGED'
+    status VARCHAR(30),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Track each recall attempt for analytics and offline sync queue
+CREATE TABLE public.recall_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    flashcard_id UUID REFERENCES flashcards(id) ON DELETE CASCADE,
+    success BOOLEAN,
+    response_time_ms INT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -317,7 +342,7 @@ CREATE TABLE public.agent_trajectory_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id UUID REFERENCES public.study_sessions(id) ON DELETE CASCADE,
     prompt_template_version VARCHAR(50),
-    raw_llm_payload JSONB, -- Stores the full execution path of the evaluation agent
+    raw_llm_payload JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
@@ -363,8 +388,15 @@ Under GDPR and FERPA, sending this un-sanitized data to external third-party API
 To mitigate this, StudyPilot executes a mandatory, multi-step pipeline for every document upload **before** sending text to external LLM endpoints:
 
 1. **In-Memory Streaming:** Read the file as a binary stream directly into memory (Vercel Node.js Serverless runtime or FastAPI VM). **DO NOT** write the raw PDF file to persistent disk storage.
-2. **Local NER Masking:** Execute a local Named Entity Recognition (NER) model (e.g., Presidio Analyzer) on the extracted text string. Locate and mask all occurrences of names, student IDs, email formats, and institution-specific identifiers. Replace detected PII with generic tags (e.g., `[NAME]`, `[ID]`).
-3. **Dependency-Free Extraction:** Run the dependency-free `unpdf` engine to extract structured, plain-text characters from the masked stream. Convert the extracted content into a lightweight markdown file (under the 4.5MB payload limit).
+2. **Local NER Masking (Regex MVP):** Serverless functions have a 50MB bundle limit, making heavy NER models like Presidio impossible at the Edge. For the MVP, we utilize a highly optimized regex-based PII detector to mask all occurrences of names, student IDs, and emails.
+   ```typescript
+   const piiPatterns = {
+     email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+     studentId: /[A-Z]{2,3}\d{5,8}/g,
+     name: /(?:Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s+[A-Z][a-z]+/g
+   };
+   ```
+3. **Dependency-Free Extraction:** Run the dependency-free `unpdf` engine (or `pdf.js` fallback) to extract structured, plain-text characters from the masked stream. Convert the extracted content into a lightweight markdown file (under the 4.5MB payload limit).
 4. **Abstract Extraction:** Prompt the LLM to extract only the abstract, structural syllabus headings, and practice question formatting. Discard the dense, copyright-protected body pages.
 5. **Memory Flush:** Store the anonymous structural metadata and vector embeddings in Supabase (`pgvector`). Immediately flush the local server memory buffer, leaving zero footprint of the original PDF document.
 
@@ -554,17 +586,19 @@ We don't need to ask for money. We need to build something worth paying for, the
 
 ## 1. Dynamic Priority Score (Adjusted for Sleep Depletion)
 
-A static priority formula based solely on exam weight is pedagogically flawed because it fails to account for the student’s actual capacity for memory consolidation. Sleep deprivation severely impairs cognitive retention and active recall performance. 
+A static priority formula based solely on exam weight is pedagogically flawed because it fails to account for the student’s actual capacity for memory consolidation. Sleep deprivation impairs cognitive retention and active recall performance. 
 
 The scheduling engine must scale down the priority index of highly complex tasks when the student is sleep-deprived, shifting focus to lower-difficulty reviews or prompting recovery.
 
-**The Advanced Priority Formula:**
+**The Advanced Priority Formula (Linear Scaling):**
 
-$$Priority_{adj} = \left( (Exam Weight \times 2) + Lecture Hours \right) \times \left( \frac{Sleep Hours}{8.0} \right)^2$$
+A sleep-deprived student can still learn, just slower. We use linear scaling with a hard floor of 0.5 (50% efficiency) rather than aggressive exponential punishment.
 
-Where $Sleep Hours$ represents the value captured during the morning onboarding slider, capped at 8.0 hours. 
-
-**Example:** If a student logs only 5.0 hours of sleep, their effective prioritization index scales down by approximately 60%, automatically realigning the daily planner away from heavy new topics to lighter, consolidated practice problems to prevent cognitive burnout.
+```typescript
+const sleepMultiplier = Math.max(0.5, Math.min(1.0, sleepHours / 8.0));
+const priorityAdj = ((examWeight * 2) + lectureHours) * sleepMultiplier;
+```
+*At 4 hours sleep, the multiplier is 0.5 (50% reduction). At 8+ hours, it is 1.0. Sleeping 12 hours provides no extra bonus.*
 
 ---
 
@@ -806,68 +840,115 @@ You're building a study system, not a chatbot. Small models are actually BETTER 
 **Build offline-first with 80MB embeddings, use cloud only for the one-time exam analysis.**
 
 
-# PART J: TECHNICAL IMPLEMENTATION DETAILS (Algorithms & Edge Constraints)
+# PART J: TECHNICAL IMPLEMENTATION DETAILS (Algorithms & Fallbacks)
 
 This section outlines the exact technical solutions to the most complex architectural challenges in StudyPilot V4.
 
-## J.1 Vercel Edge Runtime & Streaming Fallbacks
+## J.1 The PDF Text Extraction Pipeline (OCR & pdf.js Fallback)
 
-To bypass the 15-second serverless execution limits and 4.5MB payload limits on Vercel, all long-running orchestrations must be moved to asynchronous background jobs (or GCP/AWS VMs), while the Next.js Edge Runtime is reserved strictly for streaming the **Vercel AI SDK**. `LangChain JS` is explicitly banned from this codebase.
-
----
-
-## J.2 Advanced Spaced Repetition Algorithm
-
-The basic SM-2 interval multiplier is modified to calculate the next review date based on a combination of retrieval response speed, three-tier rubric scores, and physical rest metrics.
-
-Let the next review interval ($I_{n+1}$, in days) be calculated as:
-$$I_{n+1} = I_n \times EF \times \phi(R, S, T)$$
-
-Where:
-- $I_n$ is the current review interval (minimum 1 day).
-- $EF$ is the Easiness Factor of the topic, calibrated between 1.3 and 2.5.
-- $\phi(R, S, T)$ is the dynamic cognitive modulation function defined as:
-  
-  $$\phi(R, S, T) = \left( \frac{R}{100} \right) \times \left( \frac{S}{8.0} \right) \times \left( 1.0 - \min\left(0.3, \frac{T}{60000}\right) \right)$$
-
-Where:
-- $R$ is the final evaluation score (0 - 100) provided by the LLM grading ensemble.
-- $S$ is the sleep duration (0 - 12 hours) from the previous night.
-- $T$ is the response time in milliseconds. Slower response times ($T > 20,000$ ms) indicate retrieval difficulty.
-
-**Result:** If a student achieves a high accuracy score ($R = 90$) but did so with extreme hesitation ($T = 45,000$ ms) under sleep deprivation ($S = 5.5$ hours), the interval multiplier $\phi$ automatically decreases below 1.0. This forces an early review of the concept.
-
----
-
-## J.3 The Groq Prompt Engineering (Core Extractor)
-
-The prompt that parses the exam is the most critical code in the application. It must extract `keywords` so that offline local models can generate questions without needing the cloud.
+Relying solely on `pdf-parse` will fail on older, scanned university exams. Furthermore, `unpdf` may have untested Edge constraints. StudyPilot utilizes a layered extraction pipeline to guarantee parsing.
 
 ```typescript
-export const EXAM_ANALYSIS_PROMPT = `
-You are analyzing a university exam paper. Extract topics that appear in questions.
+// utils/pdf-extractor.ts
+import { getDocument } from 'pdfjs-dist'; // Standard browser/edge fallback
+import { createWorker } from 'tesseract.js';
 
-Rules:
-1. A "topic" is a specific concept (e.g., "Newton's Second Law")
-2. Count how many questions reference each topic
-3. Estimate exam weight percentage based on points per question
-4. Return ONLY valid JSON, no explanation
+async function extractPDFText(buffer: Buffer): Promise<string> {
+  try {
+    // Try primary extraction
+    const data = await tryExtractText(buffer);
+    if (data.length > 500 && !hasGarbledText(data)) return data;
+  } catch (e) {
+    console.log('Text extraction failed, falling back to OCR');
+  }
+  
+  // Fallback to OCR for scanned PDFs (runs locally or isolated microservice)
+  const worker = await createWorker('eng');
+  const { data: { text } } = await worker.recognize(buffer);
+  await worker.terminate();
+  
+  return text;
+}
+```
 
-Output format:
-{
-  "topics": [
-    {
-      "name": "string",
-      "questionCount": number,
-      "estimatedWeight": number,
-      "keywords": ["string"] // 3-5 keywords for future offline retrieval/grading
+---
+
+## J.2 Advanced Spaced Repetition Algorithm (Exponential Decay)
+
+The basic SM-2 interval multiplier is modified to calculate the next review date based on a combination of retrieval response speed and physical rest metrics. Taking 60 seconds to answer a recall question means the student doesn't know it. We cap response time at 30 seconds and apply an exponential decay penalty.
+
+```typescript
+const timePenalty = Math.exp(-responseTimeMs / 15000); // 15-second half-life
+// 5 seconds → 0.72 penalty (28% reduction)
+// 15 seconds → 0.37 penalty (63% reduction)
+// 30 seconds → 0.14 penalty (86% reduction)
+```
+
+---
+
+## J.3 Offline Sync Queue
+
+When students study offline (e.g., on a subway or in a library without Wi-Fi), attempts must be queued locally and synced later.
+
+```typescript
+// lib/offline-sync.ts
+class OfflineSyncQueue {
+  private queue: any[] = [];
+  
+  async saveAttempt(attempt: StudyAttempt) {
+    this.queue.push(attempt);
+    await this.persistToIndexedDB(attempt);
+  }
+  
+  async sync() {
+    if (!navigator.onLine) return;
+    
+    for (const attempt of this.queue) {
+      await fetch('/api/study-sessions', {
+        method: 'POST',
+        body: JSON.stringify(attempt)
+      });
     }
-  ]
+    this.queue = [];
+  }
 }
 
-Exam text:
-{{EXAM_TEXT}}
-`;
+// Listen for online event
+window.addEventListener('online', () => syncQueue.sync());
+```
+
+---
+
+## J.4 Web Push Notifications (VAPID + Cron)
+
+```typescript
+// app/api/push/subscribe/route.ts
+import webpush from 'web-push';
+
+webpush.setVapidDetails(
+  'mailto:admin@studypilot.com',
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!
+);
+
+// Scheduled function (runs daily via Vercel Cron Jobs)
+export async function sendDailyReminders() {
+  const dueTopics = await db.exam_topics.findMany({
+    where: { next_review_date: { lte: new Date() }, user: { push_enabled: true } }
+  });
+  
+  for (const topic of dueTopics) {
+    await webpush.sendNotification(
+      topic.user.pushSubscription,
+      JSON.stringify({
+        title: 'Time to Review!',
+        body: `Your spaced repetition for ${topic.topic_name} is due.`,
+        icon: '/icon-192.png',
+        data: { topicId: topic.id }
+      })
+    );
+  }
+}
 ```
 
 

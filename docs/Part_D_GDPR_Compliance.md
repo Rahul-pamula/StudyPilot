@@ -9,8 +9,15 @@ Under GDPR and FERPA, sending this un-sanitized data to external third-party API
 To mitigate this, StudyPilot executes a mandatory, multi-step pipeline for every document upload **before** sending text to external LLM endpoints:
 
 1. **In-Memory Streaming:** Read the file as a binary stream directly into memory (Vercel Node.js Serverless runtime or FastAPI VM). **DO NOT** write the raw PDF file to persistent disk storage.
-2. **Local NER Masking:** Execute a local Named Entity Recognition (NER) model (e.g., Presidio Analyzer) on the extracted text string. Locate and mask all occurrences of names, student IDs, email formats, and institution-specific identifiers. Replace detected PII with generic tags (e.g., `[NAME]`, `[ID]`).
-3. **Dependency-Free Extraction:** Run the dependency-free `unpdf` engine to extract structured, plain-text characters from the masked stream. Convert the extracted content into a lightweight markdown file (under the 4.5MB payload limit).
+2. **Local NER Masking (Regex MVP):** Serverless functions have a 50MB bundle limit, making heavy NER models like Presidio impossible at the Edge. For the MVP, we utilize a highly optimized regex-based PII detector to mask all occurrences of names, student IDs, and emails.
+   ```typescript
+   const piiPatterns = {
+     email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+     studentId: /[A-Z]{2,3}\d{5,8}/g,
+     name: /(?:Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s+[A-Z][a-z]+/g
+   };
+   ```
+3. **Dependency-Free Extraction:** Run the dependency-free `unpdf` engine (or `pdf.js` fallback) to extract structured, plain-text characters from the masked stream. Convert the extracted content into a lightweight markdown file (under the 4.5MB payload limit).
 4. **Abstract Extraction:** Prompt the LLM to extract only the abstract, structural syllabus headings, and practice question formatting. Discard the dense, copyright-protected body pages.
 5. **Memory Flush:** Store the anonymous structural metadata and vector embeddings in Supabase (`pgvector`). Immediately flush the local server memory buffer, leaving zero footprint of the original PDF document.
 
