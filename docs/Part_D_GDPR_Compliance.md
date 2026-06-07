@@ -1,78 +1,58 @@
-# PART D: GDPR COMPLIANCE
+# PART D: GDPR COMPLIANCE & PRIVACY
 
-## D.1 GDPR Implementation Checklist
+## D.1 The Zero-Storage Privacy Model
+
+By building StudyPilot as a Progressive Web App (PWA), we inherently eliminate the vast majority of GDPR and privacy liabilities. We embrace a **Zero-Storage Privacy Model**.
+
+### Local Storage First
+All granular study data (when you paused, what you typed in the scratchpad, your exact focus intervals, your session names) is stored exclusively in your browser's **IndexedDB / `localStorage`**. It never touches our servers.
+
+### What Hits the Cloud Server?
+If you create an account to save your streaks, our database (Supabase) only stores:
+- `user_id`
+- `email`
+- `total_minutes_focused`
+- `current_streak`
+
+**We do NOT store:**
+- What websites you visited (the browser sandbox prevents this anyway)
+- What applications you used
+- Any telemetry logs or screen activity
+
+---
+
+## D.2 GDPR Implementation Checklist
 
 ### User Rights Endpoints
-```python
-# FastAPI routes for GDPR
-@router.get("/user/data/export")
-async def export_user_data(current_user: User = Depends(get_current_user)):
-    """Generate GDPR-compliant data export (JSON)"""
-    data = {
-        "profile": current_user.profile.dict(),
-        "study_sessions": get_user_sessions(current_user.id),
-        "focus_scores": get_focus_history(current_user.id),
-        "created_at": datetime.utcnow().isoformat()
-    }
-    
-    # Generate file and upload to S3 with 24h expiry
-    s3_key = f"exports/{current_user.id}/gdpr_export_{date.today()}.json"
-    s3_client.put_object(Bucket='studypilot-exports', Key=s3_key, Body=json.dumps(data))
-    
-    return {"download_url": generate_presigned_url(s3_key, expires=86400)}
+Because we store almost no personal data, exporting and deleting is trivial.
 
-@router.delete("/user/data")
-async def delete_all_user_data(current_user: User = Depends(get_current_user)):
-    """Right to be forgotten"""
-    # Delete from PostgreSQL
-    db.query(Session).filter_by(user_id=current_user.id).delete()
-    db.query(FocusScore).filter_by(user_id=current_user.id).delete()
-    db.query(Profile).filter_by(id=current_user.id).delete()
-    
-    # Queue deletion of local daemon data via WebSocket
-    await notify_daemon(current_user.id, "delete_local_data")
-    
-    # Delete auth user
-    supabase.auth.admin.delete_user(current_user.id)
-    
-    db.commit()
-    return {"message": "All data permanently deleted"}
+```typescript
+// Next.js Server Action for GDPR
+export async function deleteUserAccount() {
+  const supabase = createServerActionClient({ cookies });
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (user) {
+    // 1. Delete from Supabase Auth (cascade deletes the profile streak)
+    await supabase.auth.admin.deleteUser(user.id);
+  }
+  
+  // 2. Client-side purge
+  return { success: true, message: "Account deleted. Please clear local storage." };
+}
 ```
 
-### Cookie Consent Banner
-```tsx
-// GDPRConsent.tsx - Shown on first launch
-const GDPRConsent = () => {
-  const [accepted, setAccepted] = useState(false);
-  
-  if (localStorage.getItem('gdpr_accepted')) return null;
-  
-  return (
-    <div className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 p-4 z-50">
-      <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-4 justify-between items-center">
-        <div className="text-sm space-y-1">
-          <p>🍪 We value your privacy. StudyPilot uses:</p>
-          <ul className="list-disc list-inside text-gray-300">
-            <li>Essential cookies for authentication</li>
-            <li>Local storage for preferences</li>
-            <li>No third-party tracking</li>
-          </ul>
-          <Link to="/privacy" className="text-blue-400 underline">Read Privacy Policy</Link>
-        </div>
-        
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setAccepted(false)}>
-            Reject Non-Essential
-          </Button>
-          <Button onClick={() => {
-            localStorage.setItem('gdpr_accepted', 'true');
-            setAccepted(true);
-          }}>
-            Accept All
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-```
+### Data Portability
+Users can click "Export My Data" in Settings. This simply triggers a client-side JSON download of their `localStorage` state. No server processing required.
+
+### Cookie Consent
+We do not use tracking cookies, Google Analytics, or third-party pixels. The only cookies used are secure, HTTP-only session tokens for Supabase Auth, which are strictly necessary and exempt from explicit GDPR cookie consent banners.
+
+---
+
+## D.3 User-Facing Privacy Guarantee
+
+This exact text will be displayed prominently on the Landing Page and the Timer dashboard:
+
+> 🛡️ **StudyPilot is Sandboxed & Secure**
+> This app runs entirely in your browser. It physically cannot see your other tabs, it cannot see your desktop apps, and it cannot spy on your computer. Your granular study logs are saved locally on your device. We only sync your daily total minutes to save your streak. You are in complete control.

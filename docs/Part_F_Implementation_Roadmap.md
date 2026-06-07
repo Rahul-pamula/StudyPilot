@@ -1,76 +1,54 @@
-# PART F: IMPLEMENTATION ROADMAP
+# PART F: IMPLEMENTATION ROADMAP (14-Day MVP Sprint)
 
-## Phase 1: Foundation (Week 1-2)
-- [ ] Landing page with download buttons
-- [ ] Supabase Auth integration (Google + email)
-- [ ] Basic Electron shell + auto-updater
-- [ ] PostgreSQL schema with RLS
+By pivoting to a Progressive Web App, we drastically reduce our time-to-market. The massive 9-week desktop roadmap is replaced by a highly focused 14-day sprint.
 
-## Phase 2: Onboarding (Week 3)
-- [ ] 4-step beautiful onboarding flow
-- [ ] Profile creation and preferences
-- [ ] GDPR consent banner
-- [ ] Email verification flow
+## Sprint 1: Foundation & Timer Engine (Days 1-7)
+- [x] Architecture Planning & PWA Strategy
+- [x] Next.js 14 App Router scaffold
+- [ ] Supabase Auth integration (Google OAuth)
+- [ ] Mobile-First Layout (Bottom Tabs / Desktop Sidebar)
+- [ ] Core Pomodoro Timer Engine (using `Date.now()` for background resilience)
+- [ ] LocalStorage synchronization hook
 
-## Phase 3: Core Feature (Week 4-6)
-- [ ] Python daemon with OS telemetry
-- [ ] Preparation Mode (2-word verification)
-- [ ] Focus Score dashboard
-- [ ] Desktop notifications
-
-## Phase 4: Polish (Week 7-8)
-- [ ] Profile page with all subpages
-- [ ] Settings panel (appearance, notifications)
-- [ ] GDPR data export/delete
-- [ ] Analytics dashboard with charts
-
-## Phase 5: Launch Prep (Week 9)
-- [ ] App signing (Windows/macOS)
-- [ ] Landing page SEO + analytics
-- [ ] Error tracking (Sentry)
-- [ ] Beta testing with 100 users
+## Sprint 2: The Viral Hook (Days 8-14)
+- [ ] "Crisis Mode" Exam Registration Form
+- [ ] Groq API integration via Next.js Server Actions
+- [ ] Prompt engineering for generating survival study plans
+- [ ] Profile / Dashboard view (fetching daily streak from Supabase)
+- [ ] Add `next-pwa` for offline service workers and `manifest.json`
+- [ ] Vercel Deployment & Lighthouse PWA Audit
 
 ---
 
-## 📁 File Structure (Desktop App)
+## 📁 File Structure (Next.js PWA)
 
 ```text
-studypilot-desktop/
+studypilot-web/
 ├── src/
-│   ├── main/
-│   │   ├── index.ts           # Electron main process
-│   │   ├── ipc-handlers.ts    # IPC bridge to Python
-│   │   └── auto-updater.ts
-│   ├── renderer/
-│   │   ├── pages/
-│   │   │   ├── Landing.tsx
-│   │   │   ├── Onboarding/
-│   │   │   │   ├── Step1.tsx
-│   │   │   │   ├── Step2.tsx
-│   │   │   │   ├── Step3.tsx
-│   │   │   │   └── Step4.tsx
-│   │   │   ├── Dashboard.tsx
-│   │   │   ├── Profile/
-│   │   │   │   ├── Index.tsx
-│   │   │   │   ├── Settings/
-│   │   │   │   │   ├── Account.tsx
-│   │   │   │   │   ├── Privacy.tsx
-│   │   │   │   │   └── Appearance.tsx
-│   │   │   │   └── Help.tsx
-│   │   │   └── StudySession.tsx
-│   │   ├── components/
-│   │   │   ├── ui/            # Radix primitives
-│   │   │   ├── FocusRing.tsx
-│   │   │   └── Toast.tsx
-│   │   ├── hooks/
-│   │   │   ├── useAuth.ts
-│   │   │   └── useTelemetry.ts
-│   │   └── store/
-│   │       └── userStore.ts
-│   └── python-daemon/
-│       ├── tracker.py
-│       ├── websocket_client.py
-│       └── local_db.py
-├── electron-builder.json
-└── package.json
+│   ├── app/
+│   │   ├── (auth)/
+│   │   │   └── login/page.tsx
+│   │   ├── (dashboard)/
+│   │   │   ├── timer/page.tsx
+│   │   │   ├── crisis/page.tsx
+│   │   │   └── profile/page.tsx
+│   │   ├── layout.tsx         # Includes mobile bottom nav
+│   │   └── page.tsx           # Landing page
+│   ├── components/
+│   │   ├── ui/                # Shadcn primitives
+│   │   ├── TimerDisplay.tsx
+│   │   └── FocusRing.tsx
+│   ├── hooks/
+│   │   ├── useTimer.ts        # Zustand + LocalStorage
+│   │   └── useAuth.ts
+│   ├── lib/
+│   │   ├── supabase/client.ts
+│   │   └── groq.ts            # LLM API
+│   └── actions/               # Server Actions
+│       └── generatePlan.ts
+├── public/
+│   ├── manifest.json          # PWA requirements
+│   └── icons/
+├── tailwind.config.ts
+└── next.config.mjs            # next-pwa plugin
 ```

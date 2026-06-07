@@ -1,80 +1,77 @@
-# PART A: HIGH-LEVEL DESIGN (System Architecture)
+# PART A: HIGH-LEVEL DESIGN (PWA Architecture)
 
 ## A.1 System Overview
-StudyPilot is a **cross-platform desktop application** with a web presence, combining edge-native tracking with cloud sync.
+StudyPilot is a **mobile-first Progressive Web App (PWA)**. By operating exclusively within the browser, it enforces a strict zero-data storage privacy model while delivering a native-app experience on iOS, Android, and Desktop.
 
 ### Deployment Matrix
 
 | Component | Platform | Tech Stack | Distribution |
 |-----------|----------|------------|--------------|
-| Landing Page | Web | Next.js (SSG) | Vercel/Cloudflare Pages |
-| Desktop App | Windows/macOS/Linux | Electron + Python daemon | Direct download (.exe/.dmg/.AppImage) |
-| Backend API | Cloud | FastAPI | Railway/DigitalOcean |
-| Database | Cloud | PostgreSQL | Neon/Timescale |
-| Authentication | Cloud | Supabase Auth / Auth0 | - |
+| Web App / PWA | Any Browser | Next.js 14 (App Router) | Vercel (Web) / "Add to Home Screen" |
+| Backend API | Cloud | Next.js Server Actions | Vercel |
+| Database | Cloud | Supabase (PostgreSQL) | Supabase Cloud |
+| Authentication | Cloud | Supabase Auth | - |
+| Local Storage | Edge (Device) | IndexedDB / `localStorage` | Zero-latency local caching |
 
 ### System Architecture Diagram
 
 ```mermaid
 graph TB
     subgraph "Public Web"
-        LP[Landing Page<br/>Next.js SSG]
+        LP[Landing Page & Web App<br/>Next.js]
     end
     
-    subgraph "User's Desktop"
-        Electron[Electron Main Process<br/>UI + IPC Bridge]
-        Python[Python Daemon<br/>OS Telemetry]
-        SQLite[(SQLite<br/>Local DB)]
-        Electron <--> Python
-        Python <--> SQLite
+    subgraph "User's Device (Browser Sandbox)"
+        PWA[Progressive Web App<br/>Next.js + Tailwind]
+        Zustand[State Manager<br/>Timer & Session]
+        LocalDB[(localStorage<br/>Granular Study Logs)]
+        PWA <--> Zustand
+        Zustand <--> LocalDB
     end
     
     subgraph "Cloud Infrastructure"
-        API[FastAPI<br/>REST + WebSocket]
+        API[Next.js Server Actions<br/>Secure API Routes]
         Auth[Supabase Auth<br/>Google + Email]
-        PG[(PostgreSQL<br/>RLS Enabled)]
-        CDN[CDN<br/>App Downloads]
+        PG[(PostgreSQL<br/>Only stores total streak)]
+        Groq[Groq Cloud<br/>LLM Exam Planner]
     end
     
-    LP --> |Download| CDN
-    Electron --> |REST + WS| API
+    LP --> |Visits| PWA
+    PWA --> |Server Actions| API
     API --> Auth
     API --> PG
-    Python --> |Telemetry Sync| API
+    API --> |Generates Crisis Plan| Groq
 ```
 
 ---
 
 ## A.2 Technology Stack Details
 
-### Frontend (Electron Desktop App)
+### Frontend & PWA Framework
 ```yaml
-Framework: Electron 28+
+Framework: Next.js 14 (App Router)
+PWA Support: next-pwa (Service Workers + Offline Cache)
 UI Library: React 18 + TypeScript
 Styling: TailwindCSS + Framer Motion (animations)
 State Management: Zustand (persisted locally)
-Component Library: Radix UI (accessible, headless)
+Component Library: Shadcn UI
 Icons: Lucide React
-Notifications: Electron Notification API
 ```
 
-### Backend (FastAPI Cloud)
+### Backend & AI Infrastructure
 ```yaml
-Framework: FastAPI 0.100+
-ORM: SQLAlchemy 2.0 + Alembic
-Auth: Supabase Auth (JWT validation)
-Background Tasks: Celery + Redis
-Rate Limiting: SlowAPI
-CORS: Configured for desktop app origin
+Backend Environment: Next.js Server Actions (Edge/Node)
+Database: Supabase (PostgreSQL) - strictly for cross-device authentication and streaks
+Authentication: Supabase Auth (JWT validation)
+LLM Provider: Groq API (Mixtral 8x7B) for high-speed study scheduling
 ```
 
-### Desktop Daemon (Python)
-```yaml
-Language: Python 3.11+
-Packaging: PyInstaller (bundled with Electron)
-OS APIs: 
-  - macOS: pyobjc (AppKit)
-  - Windows: pywin32
-  - Linux: python-xlib
-IPC: HTTP localhost:8765 (Electron ↔ Python)
-```
+---
+
+## A.3 The PWA Advantage
+
+### Browser Sandboxing
+By running as a PWA, StudyPilot physically cannot spy on other applications. It is strictly limited by browser security, building immediate trust with students.
+
+### Background Throttling Defense
+Mobile browsers freeze JavaScript when minimized. The StudyPilot Pomodoro Timer engine relies on absolute `Date.now()` timestamp differences instead of `setInterval()`, ensuring time is never lost when the user checks a text message.

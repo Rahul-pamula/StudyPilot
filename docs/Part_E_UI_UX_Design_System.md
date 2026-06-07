@@ -1,4 +1,4 @@
-# PART E: UI/UX DESIGN SYSTEM
+# PART E: UI/UX DESIGN SYSTEM (Mobile-First PWA)
 
 ## E.1 Design Tokens
 
@@ -22,7 +22,6 @@ module.exports = {
       animation: {
         'slide-up': 'slideUp 0.3s ease-out',
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'confetti': 'confetti 1s ease-out forwards',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -33,7 +32,18 @@ module.exports = {
 };
 ```
 
-## E.2 Component Library (Custom)
+## E.2 Mobile-First Layout Patterns
+
+Since StudyPilot is a Progressive Web App, the primary interface must feel like a native mobile application.
+
+### Bottom Tab Navigation (Mobile: `< 768px`)
+- A fixed bottom bar with 4 icons: `Timer | Crisis | Log | Profile`
+- Includes `pb-20` safe area padding so content doesn't get hidden behind the iOS home indicator.
+
+### Sidebar Navigation (Desktop: `>= 768px`)
+- Using Tailwind's `md:flex`, the bottom navigation automatically converts into a persistent left-hand sidebar for laptop users.
+
+## E.3 Component Library (Custom)
 
 ### Focus Score Ring
 ```tsx
@@ -74,7 +84,7 @@ const FocusRing = ({ score, size = 120 }: { score: number; size?: number }) => {
 // Custom toast with slide animation
 toast.success({
   title: "🎉 Study session complete!",
-  description: "You focused for 2 hours 15 minutes",
+  description: "You focused for 50 minutes. Time for a break!",
   duration: 4000,
   icon: <Rocket className="text-green-500" />
 });
