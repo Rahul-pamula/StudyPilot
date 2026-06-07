@@ -11,7 +11,7 @@ GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
 
 GROQ_MODEL         = "llama-3.3-70b-versatile"
 GROQ_URL           = "https://api.groq.com/openai/v1/chat/completions"
-DB_FILE            = "studypilot.db"
+DB_FILE            = os.getenv("DB_FILE", "studypilot.db")
 
 # Motivational banks for empathetic student feedback
 MOTIVATIONAL_BANK = {
