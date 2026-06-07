@@ -1,18 +1,34 @@
-# PART F: IMPLEMENTATION ROADMAP (V3 MVP Sprint)
+# PART F: IMPLEMENTATION ROADMAP (10-Week MVP)
 
-The 6-week timeline has been re-architected. We are no longer building a bulletproof offline timer. We are building the **AI-Powered Active Recall Platform**.
+Building a truly robust AI-Powered Active Recall Platform with offline-first capabilities requires careful engineering. We have adjusted the timeline to a realistic **10-week engineering sprint** focused on prompt validation, data integrity, and fallback mechanisms.
 
-## Phase 1: The 80/20 AI Analyzer (Weeks 1-2)
-**Goal: Build the feature that makes students say "Wow."**
-- **Week 1:** Next.js App Router setup, Supabase Auth. Build the PDF Upload UI component with drag-and-drop.
-- **Week 2:** Integrate `pdf-parse` in Next.js Server Actions. Connect to **Groq API (Mixtral)** with strict prompt engineering to extract topics, calculate frequencies, and output JSON arrays of the highest-yield subjects.
+## Immediate Prerequisites (Before Week 1)
+- **Dataset Collection:** Gather 20+ past exams from various disciplines (STEM, Humanities) to test generalization.
+- **Prompt Validation:** Run all exams through Groq. Measure Precision (topics extracted that appear) and Recall (topics that appear but weren't extracted). Target F1 > 0.85.
 
-## Phase 2: The Active Recall Engine (Weeks 3-4)
-**Goal: Enforce quality studying.**
-- **Week 3:** Build the "Active Recall Gate" UI. When a user marks a topic as "Studied", trigger Groq to instantly generate 3 short-answer questions based on the topic name and uploaded PDF context.
-- **Week 4:** Implement the LLM Grading logic. Groq evaluates the student's text input against the correct concepts. If passing, write to the database and calculate the first Spaced Repetition interval.
+---
 
-## Phase 3: Sleep & Spaced Repetition (Weeks 5-6)
-**Goal: The long-term retention loop.**
-- **Week 5:** Build the Dashboard Analytics. Display the Forgetting Curve and the correlation between the user's logged sleep hours and their active recall success rates.
-- **Week 6:** Implement VAPID Web Push notifications to ping users when a topic hits the 1-day, 3-day, or 1-week review window. Final deployment to Vercel.
+## Phase 1: Foundation (Weeks 1-2)
+- Next.js + Supabase Auth.
+- PDF upload component with drag-and-drop UI.
+- Test Groq extraction on the 20+ real exams.
+
+## Phase 2: Topic Extraction & Fallbacks (Weeks 3-4)
+- Finalize Groq Prompt engineering (expecting 5-10 iterations).
+- Build the async queue for PDF processing.
+- **Critical:** Implement the `tesseract.js` OCR fallback for scanned, image-based exams.
+
+## Phase 3: Active Recall Engine (Weeks 5-6)
+- Build the template-based question generation engine.
+- Implement keyword grading for immediate offline feedback (handles 80% of use cases).
+- Integrate the `MiniLM` offline embedding model for semantic similarity grading.
+
+## Phase 4: Spaced Repetition & Notifications (Weeks 7-8)
+- Implement the SM-2 Spaced Repetition mathematical algorithm.
+- Build the VAPID Web Push notification architecture and Server Cron Jobs.
+- Dashboard analytics (using Recharts).
+
+## Phase 5: Crisis Mode & Polish (Weeks 9-10)
+- Build the Academic Triage logic (dropping low-weight topics).
+- Implement the Sleep lock mechanism.
+- PWA testing across iOS, Android, and Desktop browsers. Performance optimization.
