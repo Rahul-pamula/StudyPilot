@@ -1,77 +1,68 @@
-# PART A: HIGH-LEVEL DESIGN (PWA Architecture)
+# PART A: HIGH-LEVEL DESIGN (The A-Student OS)
 
 ## A.1 System Overview
-StudyPilot is a **mobile-first Progressive Web App (PWA)**. By operating exclusively within the browser, it enforces a privacy-by-design model while delivering a native-app experience across devices.
+StudyPilot V3 is no longer a time-tracking application. It is an **AI-Powered Active Recall and Exam Strategy Platform**. It operates on the fundamental academic truth that *quality* of study (retention, high-yield focus, sleep) is infinitely more valuable than *quantity* (minutes studied).
+
+### Core Features
+1. **Past Exam Analyzer:** AI extraction of 80/20 high-yield topics from uploaded PDFs.
+2. **Active Recall Engine:** Mandatory AI-generated flashcards/write-ups at the end of study sessions.
+3. **Forgetting Curve Tracker:** Automated scheduling for spaced repetition.
 
 ### Deployment Matrix
 
 | Component | Platform | Tech Stack | Distribution |
 |-----------|----------|------------|--------------|
 | Web App / PWA | Any Browser | Next.js 14 (App Router) | Vercel (Web) / "Add to Home Screen" |
-| Backend API | Cloud | Next.js Server Actions | Vercel |
+| AI PDF Parser | Edge | Groq API (Mixtral 8x7B) + Langchain | Cloud Processing |
 | Database | Cloud | Supabase (PostgreSQL) | Supabase Cloud |
-| Local Storage | Edge (Device) | IndexedDB / `localStorage` | Zero-latency local caching |
 
 ### System Architecture Diagram
 
 ```mermaid
 graph TB
-    subgraph "Public Web"
-        LP[Landing Page & Web App<br/>Next.js]
+    subgraph "The A-Student Workflow"
+        Upload[Upload Past Exams PDF]
+        Analyze[Groq AI Extractor]
+        Plan[80/20 Weighted Study Plan]
+        Recall[Active Recall Engine]
+        Spaced[Spaced Repetition Scheduler]
     end
     
-    subgraph "User's Device (Browser Sandbox)"
-        PWA[Progressive Web App<br/>Next.js + Tailwind]
-        Worker[Web Worker<br/>Background Timer Thread]
-        Zustand[State Manager<br/>Timer & Session]
-        LocalDB[(IndexedDB<br/>Granular Study Logs)]
-        
-        PWA <--> Zustand
-        Zustand <--> LocalDB
-        Worker <--> PWA
+    subgraph "Infrastructure"
+        PWA[Next.js PWA Client]
+        API[Server Actions]
+        DB[(Supabase DB)]
     end
     
-    subgraph "Cloud Infrastructure"
-        API[Next.js Server Actions]
-        Auth[Supabase Auth]
-        PG[(PostgreSQL<br/>Streak Integrity Backup)]
-        Vapid[VAPID Push Service]
-    end
-    
-    LP --> |Visits| PWA
-    PWA --> |Server Actions| API
-    PWA --> |Push Subscription| Vapid
-    API --> Auth
-    API --> PG
+    Upload --> Analyze
+    Analyze --> Plan
+    Plan --> PWA
+    PWA --> API
+    API --> Recall
+    Recall --> DB
+    DB --> Spaced
+    Spaced --> PWA
 ```
 
 ---
 
-## A.2 The Bulletproof Timer Architecture
+## A.2 The Active Recall Engine Architecture
 
-Mobile and desktop browsers aggressively throttle JavaScript in background tabs to save battery. A naive `setInterval` or `Date.now()` implementation will fail under real-world conditions.
-
-StudyPilot employs a multi-layered defense to ensure timer integrity:
-
-1. **Web Workers:** The core countdown logic runs in a separate Web Worker thread, which is less susceptible to main-thread UI freezing.
-2. **BroadcastChannel API:** If a user opens StudyPilot in three different tabs, the BroadcastChannel API synchronizes the timer state across all instances in real-time.
-3. **Wake Lock API:** For desktop users, the app requests a `Screen Wake Lock` to prevent the monitor from sleeping during an active focus session.
-4. **Server-Side Heartbeat:** For critical sessions, periodic lightweight pings are sent to the backend to reconcile time drift if the device was fully suspended (e.g., closing a laptop lid).
+To enforce active recall, StudyPilot employs a strict verification gate:
+1. A student studies a topic (e.g., "Thermodynamics").
+2. The user clicks "Log Session".
+3. The Next.js API requests 3 rapid-fire questions from Groq about Thermodynamics.
+4. The user must type their answers.
+5. Groq evaluates the answers. **If the user fails, the session is discarded as "Passive Study."** If they pass, it is logged, and the topic enters the Spaced Repetition schedule.
 
 ---
 
-## A.3 Progressive Web App (PWA) Standards
+## A.3 Technology Stack Details
 
-To ensure StudyPilot behaves exactly like a native app on iOS and Android, the `manifest.json` and meta tags strictly adhere to PWA standards:
-
-```json
-{
-  "name": "StudyPilot",
-  "short_name": "StudyPilot",
-  "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#000000",
-  "theme_color": "#1e3a8a"
-}
+```yaml
+Framework: Next.js 14 (App Router)
+AI Integration: Groq API (Incredible speed required for real-time recall questions)
+File Handling: Next.js API Routes for PDF parsing (pdf-parse)
+Styling: TailwindCSS + Shadcn UI
+Database: Supabase (PostgreSQL)
 ```
-*Crucially, `"display": "standalone"` ensures the browser URL bar is hidden when launched from the Home Screen.*

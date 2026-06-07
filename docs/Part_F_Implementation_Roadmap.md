@@ -1,23 +1,18 @@
-# PART F: IMPLEMENTATION ROADMAP (6-Week MVP)
+# PART F: IMPLEMENTATION ROADMAP (V3 MVP Sprint)
 
-Building a truly robust Progressive Web App that works offline and synchronizes across devices takes careful engineering. We have discarded the naive 14-day timeline in favor of a realistic 6-week engineering sprint focused entirely on the core engine.
+The 6-week timeline has been re-architected. We are no longer building a bulletproof offline timer. We are building the **AI-Powered Active Recall Platform**.
 
-## Phase 1: The Bulletproof Core (Weeks 1-3)
-**Goal: A timer that never fails, even when the user closes their laptop.**
+## Phase 1: The 80/20 AI Analyzer (Weeks 1-2)
+**Goal: Build the feature that makes students say "Wow."**
+- **Week 1:** Next.js App Router setup, Supabase Auth. Build the PDF Upload UI component with drag-and-drop.
+- **Week 2:** Integrate `pdf-parse` in Next.js Server Actions. Connect to **Groq API (Mixtral)** with strict prompt engineering to extract topics, calculate frequencies, and output JSON arrays of the highest-yield subjects.
 
-- **Week 1:** Next.js scaffolding, Supabase Auth integration, and RLS policies.
-- **Week 2:** The Timer Engine. Implementing Web Workers for background counting and `WakeLock API` for desktop users.
-- **Week 3:** Cross-device sync. Implementing `IndexedDB` for local storage and `BroadcastChannel API` for cross-tab synchronization.
+## Phase 2: The Active Recall Engine (Weeks 3-4)
+**Goal: Enforce quality studying.**
+- **Week 3:** Build the "Active Recall Gate" UI. When a user marks a topic as "Studied", trigger Groq to instantly generate 3 short-answer questions based on the topic name and uploaded PDF context.
+- **Week 4:** Implement the LLM Grading logic. Groq evaluates the student's text input against the correct concepts. If passing, write to the database and calculate the first Spaced Repetition interval.
 
-## Phase 2: PWA Infrastructure & Gamification (Weeks 4-5)
-**Goal: Making it feel like a native app with a reliable streak system.**
-
-- **Week 4:** PWA configuration (`manifest.json`, Service Workers) and debugging iOS Safari background eviction quirks.
-- **Week 5:** Streak Integrity. Writing the logic to calculate streaks dynamically from the `last_study_date` database field. Implementing Web Push Notifications (VAPID).
-
-## Phase 3: Polish & Launch (Week 6)
-**Goal: Responsive layout and compliance.**
-
-- **Week 6:** Building the adaptive navigation (Bottom tabs for mobile, Sidebar for desktop). Adding Cookie Consent banners and Vercel analytics opt-outs. Final testing across 3 OS environments and 4 browser engines.
-
-*(Note: The AI "Crisis Mode Planner" has been deferred to Version 1.1 to ensure the core MVP timer is flawless).*
+## Phase 3: Sleep & Spaced Repetition (Weeks 5-6)
+**Goal: The long-term retention loop.**
+- **Week 5:** Build the Dashboard Analytics. Display the Forgetting Curve and the correlation between the user's logged sleep hours and their active recall success rates.
+- **Week 6:** Implement VAPID Web Push notifications to ping users when a topic hits the 1-day, 3-day, or 1-week review window. Final deployment to Vercel.

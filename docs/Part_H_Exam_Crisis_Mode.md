@@ -1,29 +1,35 @@
-# PART H: EXAM CRISIS MODE (V1.1 Feature)
+# PART H: EXAM CRISIS MODE (V3 Implementation)
 
-*(Note: This feature is slated for Version 1.1, following the completion of the 6-Week Core MVP sprint).*
+## 1. The Brutal Truth About Crisis Mode
 
-## 1. The Psychology of Last-Minute Learning
+In previous versions, "Crisis Mode" was a timer with red alarms. As the "A-Student Blueprint" review pointed out, **a timer won't save you 24 hours before an exam.** Only high-yield active recall can save you.
 
-### Persona: "The Crammer"
-- **Behavior:** Studies 1-2 days before exam
-- **Pain points:** High anxiety, poor retention, all-nighters
+## 2. Crisis Mode Protocol (The 24-Hour Save)
 
-## 2. Emergency Features for Crisis Mode
+When a student clicks the "Crisis Mode" button (indicating an exam is <48 hours away), StudyPilot initiates an extreme academic triage protocol.
 
-### 2.1 Panic Button 🚨
-**Click Behavior:**
-1. **Emergency Assessment:** Chapters left, Energy level.
-2. **AI Response:** Skip lowest weight chapters, focus strictly on high-yield topics.
+### Step 1: The Triage Cut
+- The AI completely drops all topics that have less than a 10% exam weight.
+- The UI brutally informs the student: *"You do not have time to learn Thermodynamics. We are abandoning it. Focus 100% on Electricity (37% weight) to pass."*
 
-### 2.2 Positive Reinforcement Web Guard
-**Feature:** Nudging when dangerous patterns are detected based on the manual timer log.
+### Step 2: Pure Active Recall (No Reading Allowed)
+- Passive reading is banned. 
+- Crisis Mode locks the UI into a pure flashcard/practice problem interface. 
+- The user is bombarded with AI-generated practice questions specifically targeting their "High-Weight / Low-Confidence" topics.
 
-**Triggers:**
-- Timer runs > 12 hours in 24h → UI gently suggests: *"You've studied 12 hours. Your brain consolidates memory during sleep. Consider a break."*
+### Step 3: The Hard Sleep Stop
+- 10:00 PM the night before the exam.
+- The app locks the active recall engine.
+- **Message:** *"Studying all night actively destroys your retrieval ability. You will score 20% lower tomorrow if you don't sleep right now. Go to bed."*
+- If the user overrides it, the app explicitly logs the failure and predicts a grade penalty.
 
-### 2.3 Tab Focus Reinforcement
-**Crucial Correction:** We do NOT play loud beeps or punishment audio if a user switches tabs. This is actively harmful design and legally questionable.
-**Instead:** We reward focus. If the `document.visibilityState` remains "visible" for the entire 25-minute Pomodoro, we reward the user with a streak multiplier or confetti animation.
+---
 
-## 3. Pricing Strategy: 100% Free For Students
-We do not monetize student anxiety. The Panic Button and AI Study Plans are 100% free.
+## 3. The 7-Day Protocol Tracker
+
+For students starting a week out, the Dashboard transforms into the 7-Day Checklist:
+
+- `[ ]` **Day 7:** Take full practice exam (Upload results to StudyPilot for weak-spot analysis)
+- `[ ]` **Day 6-4:** Targeted Active Recall on weak spots only
+- `[ ]` **Day 3-2:** No new material. Re-test missed practice questions.
+- `[ ]` **Day 1:** Light review. Sleep 8+ hours.

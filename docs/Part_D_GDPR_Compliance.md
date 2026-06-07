@@ -1,32 +1,23 @@
-# PART D: GDPR COMPLIANCE & PRIVACY
+# PART D: GDPR COMPLIANCE & PRIVACY (PDF Handling)
 
-## D.1 The Legally Accurate Privacy Model
+## D.1 PDF Data Privacy Model
 
-StudyPilot is built on a foundation of ethical engineering. We do not claim that tracking is "physically impossible"—a PWA is technically capable of tracking clicks and external navigation. 
+The core of StudyPilot V3 is the **AI Past Exam Analyzer**. This requires users to upload potentially sensitive university documents (past exam papers, syllabi, lecture slides).
 
-Instead, our guarantee is: **We actively choose not to track you.**
+### D.1.1 Zero-Retention Document Processing
+To comply with GDPR and university academic integrity policies, we enforce strict data handling for uploaded files:
+1. **No Permanent Storage:** Uploaded PDFs are parsed entirely in memory using Next.js Serverless Functions (or stored ephemerally in `/tmp`).
+2. **Immediate Destruction:** Once the text is extracted and sent to the Groq API for 80/20 analysis, the original PDF and the raw extracted text are permanently deleted from the server.
+3. **Database Storage:** The database only stores the *derived metadata* (e.g., Topic: "Thermodynamics", Frequency: 12), never the actual exam questions or university IP.
 
-### Data Minimization Strategy
-- All granular study data (when you paused, session names, focus intervals) is stored exclusively in your browser's **IndexedDB**. 
-- Our cloud database (Supabase) only stores:
-  - `user_id`
-  - `email`
-  - `last_study_date` (for streak calculation)
-
-### Explicit Analytics Opt-Out
-By default, Vercel deployments include analytics collection. We will explicitly disable Vercel Web Analytics and Vercel Speed Insights in the production deployment to uphold our zero-tracking promise.
+### D.1.2 LLM Privacy Agreement
+Groq API is utilized as our processing sub-processor. We must explicitly opt out of data training in our API contracts. User uploaded study materials are **never** used to train models.
 
 ---
 
-## D.2 GDPR Implementation Checklist
-
-### Cookie Consent (ePrivacy Directive)
-Because Supabase Auth relies on secure, HTTP-only cookies to maintain session state, we must obtain consent or establish legitimate interest. A lightweight consent banner will be presented during onboarding:
-> *"StudyPilot uses essential cookies purely to keep you logged in. We do not use tracking or advertising cookies."*
-
-### Data Portability (Article 20)
-Users have the right to export their data in a machine-readable format.
-When a user clicks "Export My Data", they receive a comprehensive `JSON` payload that includes:
-1. Their `IndexedDB` local session history.
-2. A direct API pull of their Supabase Auth metadata.
-This fulfills the requirement of exporting all personal data without undue burden.
+## D.2 Data Portability & The Forgetting Curve
+When a user requests a GDPR data export, they receive a JSON payload containing:
+- Their exact Spaced Repetition schedule.
+- Their active recall success rates per topic.
+- Their sleep correlation data.
+This ensures complete portability of their academic profile.

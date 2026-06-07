@@ -1,24 +1,39 @@
-# PART G: PRICING & CLOUD INFRASTRUCTURE COSTS
+# PART G: MONETIZATION & ACQUISITION STRATEGY
 
-## 1. Core Principle: 100% Free for Students
-**StudyPilot will always be free for students.** No paywalls, no premium tiers, no credit card required.
+## 1. The Value Proposition Pivot
+
+StudyPilot V3 is infinitely easier to market than a timer app. 
+- **Old Pitch:** "Track your focus time." (Boring, commoditized).
+- **New Pitch:** "Upload your past exams, get the 80/20 cheat sheet, and use AI active recall to guarantee an A." (Irresistible).
 
 ---
 
-## 2. Infrastructure Cost Reality Check
+## 2. Freemium Pricing Model
 
-Previous estimates assumed a "$0/month" cost by relying on free tiers. This is unrealistic for a scaling application. We must architect for actual infrastructure limits.
+While the timer was 100% free, **AI Inference (Groq) costs money.** We must restructure the pricing to be sustainable while remaining highly accessible to students.
 
-### 2.1 Vercel (Frontend & Serverless APIs)
-- **The Limit:** The free tier offers 100GB of bandwidth and 6,000 build minutes.
-- **The Reality:** 1,000 active daily users pulling PWA assets will quickly approach the 100GB limit.
-- **The Plan:** We will upgrade to Vercel Pro ($20/mo) immediately upon hitting 500 DAU to ensure uptime and reliable serverless function execution.
+### The "A-Student" Free Tier
+- **1 Past Exam Analysis per month**
+- **Unlimited manual topic logging**
+- **3 AI Active Recall sessions per day**
+- Sleep tracking & Spaced Repetition scheduling
 
-### 2.2 Supabase (PostgreSQL & Auth)
-- **The Limit:** The free tier offers 500MB database size and 2 active projects.
-- **The Reality:** Because we only store a single row per user in the `profiles` table (`last_study_date`), 500MB can easily support 100,000+ users.
-- **The Plan:** We will maintain the free tier for production, but must spin up a local Docker instance for staging, as the free tier restricts us to 2 active cloud projects.
+### The "Dean's List" Pro Tier ($4.99/mo or $39/year)
+- **Unlimited PDF Exam Uploads & Analysis**
+- **Unlimited AI Active Recall grading**
+- **Feynman Technique Voice transcription**
+- **Custom AI-generated practice exams**
 
-### 2.3 Disaster Recovery Plan
-Because we are the data controllers, we cannot blindly rely on Supabase's uptime.
-- **Backup Strategy:** We will implement pg_dump backups to an external S3 bucket every 24 hours to ensure streak data is never permanently lost during a cloud outage.
+---
+
+## 3. University Partnerships (B2B)
+
+The B2B pitch to universities changes entirely:
+We aren't selling a "wellness tracker" (which IT departments hate). We are selling an **AI Tutoring & Retention Platform**.
+
+| Feature | Student (Pro) | University License |
+|---------|---------------|-------------------|
+| AI Active Recall | ✅ | ✅ |
+| Past Paper Analysis | ✅ | ✅ |
+| **Course-level Analytics** | ❌ | ✅ (Professors see which topics the entire class is failing the active recall gate on) |
+| **LMS Integration** | ❌ | ✅ (Automatically pulls syllabus from Canvas to generate the 80/20 plan) |
