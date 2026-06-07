@@ -1,10 +1,13 @@
 # High-Level Design (HLD): StudyPilot Digital Wellbeing Tracker
 
-## 1. Overview
-The StudyPilot Digital Wellbeing Tracker is an advanced productivity ecosystem designed to eliminate student procrastination through "Honest & Genuine" micro-interventions. It moves beyond standard time-blocking by tracking actual digital behavior, enforcing intent, and providing empathetic nudges.
+## 1. Executive Summary
+The StudyPilot Digital Wellbeing Tracker is an advanced productivity ecosystem designed to eliminate student procrastination. It uses a **Privacy-First Edge Computing** model combined with **Enterprise-Grade Multi-Tenant Architecture** to track digital behavior, handle multi-tasking intents, and enforce "Honest & Genuine" deep work sessions.
 
-## 2. System Architecture
-The architecture is designed as a distributed system with strict boundaries between the frontend interface, the backend processing engine, and the local telemetry client.
+---
+
+## 2. System Architecture & Boundaries
+
+The architecture is highly distributed, separating the Edge (user's PC) from the Cloud (StudyPilot infrastructure) to guarantee absolute data privacy and zero-lag performance.
 
 ### Component Diagram
 
@@ -18,38 +21,58 @@ graph TD
     
     Daemon --> |Syncs only generic Focus %| API
     Daemon --> |Sends 2 words for validation| API
+    API --> |WebSocket: STOP TRACKING| Daemon
     
-    API <--> Postgres[(PostgreSQL - User Profiles only)]
+    API <--> Postgres[(PostgreSQL - RLS Enabled)]
     API <--> Groq[Groq LLM API]
 ```
 
-## 3. System Boundaries & Responsibilities
+### 2.1. StudyPilot Web App (Next.js)
+* **Responsibility:** Multi-intent capture, onboarding, and displaying high-level analytics.
+* **Master Switch:** Houses the global "Stop Tracking" toggle. When clicked, it terminates edge tracking immediately.
 
-### 3.1. StudyPilot Web App (Next.js)
-* **Responsibility:** User Onboarding, Analytics display, and Intent Capture.
-* **Data Ownership:** Fetches the aggregated, privacy-safe Focus Scores from the backend.
+### 2.2. StudyPilot Backend (FastAPI)
+* **Responsibility:** LLM Intent Validation and multi-tenant session routing.
+* **Data Ownership:** Operates under strict **Data Isolation**. It never receives raw telemetry (no app names or logs).
 
-### 3.2. StudyPilot Backend (FastAPI)
-* **Responsibility:** LLM Intent Validation and syncing high-level Focus Scores.
-* **Data Ownership:** Owns only basic user profiles and high-level stats (e.g., "Daily Focus: 85%"). **NEVER receives or stores raw app telemetry (no Instagram/YouTube logs).**
+### 2.3. Python Desktop Companion (Background Daemon)
+* **Execution:** A zero-lag OS daemon that uses C-bindings (`AppKit`/`pywin32`) to check active windows in `<1ms`.
+* **Kill-Switch Persistence:** Listens to a WebSockets channel. If the user clicks "Stop Tracking" on the web app, the daemon immediately suspends the monitoring thread and goes to sleep.
 
-### 3.3. Python Desktop Companion (Background Daemon)
-* **Responsibility:** A highly optimized, invisible background service that runs on the user's OS.
-* **Execution (Zero-Lag):** Written in low-level OS APIs (C-bindings via PyObjC/PyWin32). Sleeps heavily and only wakes up every 10 seconds for `< 1ms` to check the window title, guaranteeing **zero lag** or battery drain.
-* **Persistence:** Runs as an OS Daemon (macOS `launchd` or Windows Service). It continues monitoring even if the main UI application is closed.
-* **Data Ownership:** Stores all sensitive telemetry in a local, encrypted SQLite file on the user's hard drive.
+---
+
+## 3. Multi-Tenant Architecture & Data Isolation
+
+As a SaaS product serving multiple users simultaneously, StudyPilot implements strict enterprise-grade **Data Isolation** to prevent cross-tenant data leakage.
+
+### 3.1 Logical Isolation via Schema
+* We use a **Logical Database Isolation** pattern (Single Database, Shared Schema).
+* Every table in PostgreSQL has a mandatory `user_id` (acting as the Tenant ID).
+
+### 3.2 Row Level Security (RLS)
+To mathematically guarantee that a bug in FastAPI cannot leak User A's focus scores to User B, PostgreSQL **Row Level Security (RLS)** is enforced at the database level.
+* Example Policy:
+  ```sql
+  ALTER TABLE daily_focus_scores ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY tenant_isolation_policy ON daily_focus_scores 
+  FOR ALL USING (user_id = current_setting('studypilot.current_user_id')::uuid);
+  ```
+* FastAPI injects the `current_user_id` into the Postgres connection pool at the start of every request.
+
+---
 
 ## 4. Scalability & Edge-First Storage
 
-Instead of sending 10-second heartbeats to a cloud database (which wastes bandwidth and violates privacy), all heavy lifting happens on the Edge (the user's device).
+All heavy data lifting happens on the Edge (the user's device).
 
-* **Local DB (SQLite):** Lives at `~/.studypilot/local_telemetry.db`. Handles 100% of the raw app logs locally.
-* **Auto-Cleanup (30-Day TTL):** A background chron job within the daemon automatically deletes any local row older than 30 days to save disk space.
-* **Cloud DB (PostgreSQL):** Only stores the daily rolled-up Focus Score (e.g., `User A: 85% on Monday`) so the user can see their progress on the web dashboard.
+* **Local DB (SQLite):** Lives at `~/.studypilot/local_telemetry.db`. Handles 100% of raw logs.
+* **Auto-Cleanup (30-Day TTL):** A background chron job within the daemon deletes any row older than 30 days to save disk space.
+* **Cloud DB (PostgreSQL):** Only stores the daily rolled-up Focus Score (e.g., `85%`) under strict RLS isolation.
+
+---
 
 ## 5. Security & Extreme Privacy Guarantees
-StudyPilot's core marketing promise is **"Local-First Privacy."**
 
-1. **Air-Gapped Telemetry:** Raw screen usage data (e.g., "YouTube - React Tutorial", "Instagram") **never leaves the user's computer**. The backend physically cannot access it.
-2. **Zero-Lag Architecture:** The daemon operates outside of the UI thread, utilizing native OS hooks to ensure zero impact on gaming or heavy IDE workflows.
-3. **Unkillable Background Monitoring:** The tracker installs as a system background service. Even if the user clicks "X" on the StudyPilot companion app window, the daemon continues holding them accountable.
+1. **Air-Gapped Telemetry:** Raw screen usage data **never leaves the user's computer**. The backend physically cannot access it.
+2. **Explicit Opt-Out:** Tracking is not persistent by force. If the user stops the session in the app, the WebSockets trigger an immediate halt to the OS Daemon's polling cycle.
+3. **Zero-Lag Architecture:** The daemon operates outside of the UI thread, ensuring zero impact on gaming or IDE workflows.
