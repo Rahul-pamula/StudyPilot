@@ -4,11 +4,18 @@ StudyPilot is an AI-powered educational web application designed to help student
 
 The application operates seamlessly in both **online** (via the Groq API) and **offline** modes (falling back to local machine learning models and similarity-based algorithms). It is built with a modern decoupled architecture: a Next.js React frontend and a FastAPI backend.
 
+![Landing Page Hero](docs/screenshots/landing-hero.png)
+![Landing Page Features](docs/screenshots/landing-features.png)
+![Landing Page Benefits](docs/screenshots/landing-benefits.png)
+
 ---
 
 ## 🌟 Key Features
 
 ### 1. 💬 Ask Anything (Technical Chatbot)
+
+![Chat UI](docs/screenshots/chat.png)
+
 A chatbot helper tailored to Python, Data Structures & Algorithms (DSA), OOP, and Machine Learning.
 * **Smart Mode (Online):** Powered by the **Groq API** (`llama-3.3-70b-versatile`) to generate structured, markdown-rich answers with syntax-highlighted code blocks, lists, and tips.
 * **Offline Fallback:** Employs a local **TF-IDF + Cosine Similarity** model mapped against a pre-loaded knowledge base of 100+ common questions.
@@ -16,12 +23,18 @@ A chatbot helper tailored to Python, Data Structures & Algorithms (DSA), OOP, an
 * **Sentiment Analysis:** Monitors the student's emotional state using **NLTK's VADER Sentiment Analyzer**. If a student appears stressed, the UI gives supportive real-time micro-feedback.
 
 ### 2. 📝 Notes Summarizer
+
+![Notes Summarizer UI](docs/screenshots/summarizer.png)
+
 Allows students to paste long lecture slides, documents, or articles and receive structured summaries.
 * **Word Customization:** Customize the output length (between 10 to 1000 words).
 * **Multiple Output Formats:** Formats summaries into *Plain Text*, *Bullet Points*, *Essay*, *Letter*, or *Email*.
 * **Local Fallback:** Uses Hugging Face's local transformer pipeline (`transformers` with `t5-small`) to generate summary chunks offline when API keys are absent.
 
 ### 3. 📅 Adaptive Study Planner
+
+![Adaptive Planner UI](docs/screenshots/planner.png)
+
 A Pomodoro-style interactive study schedule that adapts dynamically to your mental state:
 * **Mood Check-in:** Processes how you are feeling (e.g., *stressed*, *tired*, *excited*) through sentiment analysis.
 * **Stress-Adaptive Intervals:**
@@ -32,6 +45,9 @@ A Pomodoro-style interactive study schedule that adapts dynamically to your ment
 * **Motivational Engine:** Delivers dynamic, mood-tailored quotes to push you through tough study sessions.
 
 ### 4. 🔑 Authentication & Security
+
+![Sign In Page](docs/screenshots/signin.png)
+
 * **SQLite Database:** Local user records, chat history, planner schedules, and note summaries are saved safely.
 * **JWT Authentication:** Secure token-based authentication handles sessions seamlessly between the Next.js frontend and FastAPI backend.
 * **Password Security:** Credentials are encrypted using SHA-256 before database storage.
