@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 .streamlit/studypilot_data.json
 studypilot.db
+venv/
+.venv/
+.DS_Store
+.idea/
+.vscode/
