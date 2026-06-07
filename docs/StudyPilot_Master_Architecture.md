@@ -192,193 +192,187 @@ Without review after 7 days: You forget 90%
 **Now close this tab and go study.**
 
 
-# PART A: HIGH-LEVEL DESIGN (The A-Student OS)
+# PART A: HIGH-LEVEL DESIGN (Enterprise Architecture)
 
 ## A.1 System Overview
-StudyPilot V3 is no longer a time-tracking application. It is an **AI-Powered Active Recall and Exam Strategy Platform**. It operates on the fundamental academic truth that *quality* of study (retention, high-yield focus, sleep) is infinitely more valuable than *quantity* (minutes studied).
-
-### Core Features
-1. **Past Exam Analyzer:** AI extraction of 80/20 high-yield topics from uploaded PDFs.
-2. **Active Recall Engine:** Mandatory AI-generated flashcards/write-ups at the end of study sessions.
-3. **Forgetting Curve Tracker:** Automated scheduling for spaced repetition.
+StudyPilot V4 is an Enterprise-Grade Educational AI Platform. It abandons isolated flashcards and basic timers in favor of semantic knowledge graphs, strict compliance pipelines, and dynamically adjusting spaced repetition driven by cognitive psychology principles.
 
 ### Deployment Matrix
 
 | Component | Platform | Tech Stack | Distribution |
 |-----------|----------|------------|--------------|
 | Web App / PWA | Any Browser | Next.js 14 (App Router) | Vercel (Web) / "Add to Home Screen" |
-| AI PDF Parser | Edge | Groq API (Mixtral 8x7B) + Langchain | Cloud Processing |
-| Database | Cloud | Supabase (PostgreSQL) | Supabase Cloud |
+| Edge AI Streaming | Vercel Edge | Vercel AI SDK (67.5 kB) | High-concurrency edge nodes |
+| Database & Vector | Cloud | Supabase (PostgreSQL + pgvector) | Supabase Cloud |
+| Document Ingestion | GCP / AWS VM | unpdf + Presidio (NER) | Isolated long-running compute |
 
 ### System Architecture Diagram
 
 ```mermaid
 graph TB
-    subgraph "The A-Student Workflow"
-        Upload[Upload Past Exams PDF]
-        Analyze[Groq AI Extractor]
-        Plan[80/20 Weighted Study Plan]
-        Recall[Active Recall Engine]
-        Spaced[Spaced Repetition Scheduler]
-    end
-    
-    subgraph "Infrastructure"
+    subgraph "Vercel Edge Routing (Streaming)"
         PWA[Next.js PWA Client]
-        API[Server Actions]
-        DB[(Supabase DB)]
+        EdgeAPI[Vercel AI SDK]
     end
     
-    Upload --> Analyze
-    Analyze --> Plan
-    Plan --> PWA
-    PWA --> API
-    API --> Recall
-    Recall --> DB
-    DB --> Spaced
-    Spaced --> PWA
+    subgraph "Long-Running Async Compute (GCP/AWS)"
+        Sanitize[In-Memory Presidio NER]
+        Unpdf[unpdf Extraction]
+        Abstract[LLM Abstract Extraction]
+    end
+    
+    subgraph "Cloud Infrastructure"
+        Groq[Groq API / OpenAI]
+        DB[(Supabase + pgvector)]
+    end
+    
+    PWA -->|File Upload| Sanitize
+    Sanitize --> Unpdf
+    Unpdf --> Abstract
+    Abstract --> DB
+    
+    PWA -->|Active Recall| EdgeAPI
+    EdgeAPI <--> Groq
+    EdgeAPI -->|Log Trajectory| DB
 ```
 
 ---
 
-## A.2 The Active Recall Engine Architecture
+## A.2 Resolving Serverless Constraints
 
-To enforce active recall, StudyPilot employs a strict verification gate:
-1. A student studies a topic (e.g., "Thermodynamics").
-2. The user clicks "Log Session".
-3. The Next.js API requests 3 rapid-fire questions from Groq about Thermodynamics.
-4. The user must type their answers.
-5. Groq evaluates the answers. **If the user fails, the session is discarded as "Passive Study."** If they pass, it is logged, and the topic enters the Spaced Repetition schedule.
+Deploying heavy LLM orchestration entirely within a Next.js serverless environment introduces critical constraints regarding payload limits, timeouts, and bundle sizing.
+
+### The Dependency Shift
+StudyPilot explicitly **rejects** the use of `LangChain JS` and `pdf-parse`.
+- `LangChain JS` carries a massive bundle size and relies on Node.js core modules (`fs`, `eval`) that instantly crash Vercel's isolated Edge Runtime.
+- `pdf-parse` relies on native C++ bindings that fail to compile or execute within serverless constraints.
+
+**The Solution:**
+StudyPilot exclusively utilizes the **Vercel AI SDK** (~67.5 kB) for optimized edge streaming (achieving ~30ms latency) and `unpdf`, a dependency-free engine for native document extraction.
 
 ---
 
-## A.3 Technology Stack Details
+## A.3 The Pedagogical Engine: Desirable Difficulties
 
-```yaml
-Framework: Next.js 14 (App Router)
-AI Integration: Groq API (Incredible speed required for real-time recall questions)
-File Handling: Next.js API Routes for PDF parsing (pdf-parse)
-Styling: TailwindCSS + Shadcn UI
-Database: Supabase (PostgreSQL)
-```
+StudyPilot operates on the "testing effect." The platform does **not** discard failed active recall sessions. The physical act of attempting to retrieve information—even if the final answer is incorrect—strengthens neural pathways. 
+
+Every retrieval attempt, successful or failed, is aggressively logged. Failures are dynamically used to shorten the next review interval rather than purging the study history, preventing the 70% 24-hour decay rate defined by cognitive research.
 
 
-# PART B: DATABASE SCHEMA & ONBOARDING
+# PART B: DATABASE SCHEMA & SEMANTIC TRACKING
 
-## B.1 Database Schema: Tracking Quality, Not Quantity
+## B.1 Database Schema: pgvector & Trajectory Logging
 
-We have completely removed `total_minutes_studied` from our metrics. The database is strictly designed around the **5 Pillars of Academic Success**.
+To support true semantic RAG operations and mitigate LLM grading biases (length/sentiment bias), the database utilizes `pgvector` and comprehensive multi-turn trajectory logging.
 
 ```sql
--- Profiles table
+-- Enable the vector extension for semantic analysis and RAG
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Profiles table tracking high-level student performance
 CREATE TABLE public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id),
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL,
     full_name VARCHAR(100),
-    
-    -- Quality Metrics
     total_active_recall_sessions INT DEFAULT 0,
     practice_problems_solved INT DEFAULT 0,
     past_exams_analyzed INT DEFAULT 0,
     average_sleep_hours FLOAT DEFAULT 0.0,
-    
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Exam Analysis Results (The 80/20 Planner)
+-- Exam Analysis Results (Graph-compatible layout)
 CREATE TABLE public.exam_topics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES profiles(id),
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     topic_name VARCHAR(200) NOT NULL,
-    appearance_frequency INT, -- How many times it appeared in past exams
+    topic_embedding vector(1536), -- Vector representation of topic for semantic search
+    appearance_frequency INT,
     exam_weight_percentage FLOAT,
-    user_mastery_level INT DEFAULT 0, -- 0 to 100 based on active recall success
-    next_review_date DATE, -- Spaced repetition scheduling
+    user_mastery_level INT DEFAULT 0,
+    parent_topic_id UUID REFERENCES exam_topics(id) ON DELETE SET NULL, -- Knowledge graphing
+    next_review_date DATE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Active Recall Logs
+-- Active Recall Logging with Rubric and Response Time Tracking
 CREATE TABLE public.study_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES profiles(id),
-    topic_id UUID REFERENCES exam_topics(id),
-    recall_score FLOAT, -- Grading provided by Groq LLM
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    topic_id UUID REFERENCES exam_topics(id) ON DELETE CASCADE,
+    raw_user_input TEXT,
+    response_duration_ms INT, -- Tracks response speed to measure fatigue
+    comprehensiveness_score FLOAT, -- Rubric dimension 1
+    accuracy_score FLOAT,          -- Rubric dimension 2
+    coherence_score FLOAT,         -- Rubric dimension 3
+    final_evaluation_score FLOAT,  -- Weighted aggregate
+    uncertainty_index FLOAT,       -- Variance across LLM ensemble models
     sleep_hours_previous_night FLOAT,
-    status VARCHAR(20), -- 'PASS', 'FAIL_PASSIVE', 'PENDING'
+    status VARCHAR(30), -- 'COMPLETED', 'FAILED_RETRIEVAL', 'UNCERTAIN_FLAGGED'
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Trajectory Logs for AI Agent Audits
+CREATE TABLE public.agent_trajectory_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES public.study_sessions(id) ON DELETE CASCADE,
+    prompt_template_version VARCHAR(50),
+    raw_llm_payload JSONB, -- Stores the full execution path of the evaluation agent
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
----
 
-## B.2 Onboarding Flow
+# PART C: PROFILE, SETTINGS & DAILY OPTIMIZATION
 
-Onboarding no longer focuses on timers. It focuses on gathering the raw material for academic success.
+## C.1 The Analytics Dashboard
 
-### Step 1: The Reality Check
-"How much sleep did you get last night?" (Slider 0-12 hours).
-*If < 7 hours: "Warning: Your memory consolidation is severely impaired today. Deep learning will be 40% less effective."*
-
-### Step 2: Upload Past Papers
-"A-Students don't read the textbook from page 1. They analyze the finish line. Upload up to 3 past exams for your hardest class."
-- User uploads PDFs.
-- Loading screen while Groq extracts the 80/20 topics.
-
-### Step 3: The 80/20 Plan Revealed
-"Here are the 3 topics that make up 65% of your final grade. This is your study plan."
-
-
-# PART C: PROFILE & SETTINGS (Analytics Dashboard)
-
-## C.1 Profile Page Architecture: The A-Student Dashboard
-
-The profile page is no longer a simple settings menu. It is an advanced analytics dashboard tracking the academic health of the student.
+The profile page visualizes the student's academic health through semantic knowledge graphs and sleep correlation charts.
 
 ### Key Metrics Displayed:
-1. **The Forgetting Curve Health:** Visual graph showing how many topics are currently "At Risk of Forgetting" vs "Mastered".
-2. **Active Recall Ratio:** Percentage of study sessions that successfully passed the AI active recall gate (Target: >85%).
-3. **Sleep vs. Retention Correlation:** A scatter plot (using Recharts) mapping the user's `sleep_hours_previous_night` against their `recall_score` to visually prove that all-nighters destroy retention.
+1. **The Forgetting Curve Health:** Visual graph tracking retention.
+2. **Active Recall Ratio:** Percentage of study sessions that successfully passed the AI active recall gate.
+3. **Sleep vs. Retention Correlation:** A scatter plot mapping the user's `sleep_hours_previous_night` against their `final_evaluation_score`.
 
 ---
 
-## C.2 Settings & Preferences
+## C.2 Deep Work Daily Schedule Optimization
 
-### 1. Spaced Repetition Aggressiveness
-Users can configure how strictly the app enforces review periods.
-- **Cram Mode (1-2 weeks out):** Reviews scheduled at 1 hour, 1 day, 3 days.
-- **Maintenance Mode:** Reviews scheduled at 1 day, 1 week, 3 weeks.
+StudyPilot replaces rigid hourly blocks with a schedule focused strictly on human energy conservation, interleaving high-yield active recall blocks with mandatory physical recovery windows.
 
-### 2. Active Recall Difficulty
-- **Multiple Choice:** Easy mode.
-- **Short Answer:** Medium mode (Groq evaluates semantics).
-- **Feynman Technique:** Hard mode. The app prompts the user to "Teach this topic to a 5-year-old via Voice Transcription."
+| Hourly Block | Activity / Operational Focus | Target Cognitive State | Platform Integration & Telemetry |
+|--------------|------------------------------|------------------------|----------------------------------|
+| **07:00 – 08:00** | Onboarding & Daily Planning | Cognitive Activation | Logs sleep hours via mobile slider; computes dynamic priority for the day. |
+| **08:00 – 12:00** | High-Yield Topic Deep Work | Peak Focus (90-min blocks) | Enforces system lockouts; redirects focus to active recall gates. |
+| **12:00 – 13:00** | Cognitive Restoration | Parasympathetic Recovery | Disables study UI; encourages physical movement. |
+| **13:00 – 16:00** | Active Recall Application | Applied Synthesis | Launches Feynman Technique modules and AI-generated quiz builders. |
+| **16:00 – 18:00** | Practice Problems & Weak Areas| Targeted Recovery | Serves historical problem sets targeting concepts with low Easiness Factors. |
+| **18:00 – 19:00** | Rest and Dinner | Mental Detachment | Continuous offline period. |
+| **19:00 – 21:00** | Light Conceptual Overviews | Schema Integration | Visualizes the student's knowledge graph, mapping structural connections. |
+| **21:00 – 22:00** | Sleep Hygiene Wind-Down | Melatonin Facilitation | Enforces persistent app lockouts; blocks late-night cram sessions. |
 
-### 3. Morning Sleep Accountability
-Toggle: *Require sleep logging before unlocking today's 80/20 study plan.*
 
+# PART D: GDPR COMPLIANCE & PII SANITIZATION PIPELINE
 
-# PART D: GDPR COMPLIANCE & PRIVACY (PDF Handling)
+## D.1 Step-by-Step Document Sanitization Pipeline
 
-## D.1 PDF Data Privacy Model
+When students upload past exams, homework papers, and private course slides, these documents regularly contain sensitive Personally Identifiable Information (PII) including student names, email addresses, professor contact details, and student ID numbers. 
 
-The core of StudyPilot V3 is the **AI Past Exam Analyzer**. This requires users to upload potentially sensitive university documents (past exam papers, syllabi, lecture slides).
+Under GDPR and FERPA, sending this un-sanitized data to external third-party API providers like Groq violates strict compliance standards.
 
-### D.1.1 Zero-Retention Document Processing
-To comply with GDPR and university academic integrity policies, we enforce strict data handling for uploaded files:
-1. **No Permanent Storage:** Uploaded PDFs are parsed entirely in memory using Next.js Serverless Functions (or stored ephemerally in `/tmp`).
-2. **Immediate Destruction:** Once the text is extracted and sent to the Groq API for 80/20 analysis, the original PDF and the raw extracted text are permanently deleted from the server.
-3. **Database Storage:** The database only stores the *derived metadata* (e.g., Topic: "Thermodynamics", Frequency: 12), never the actual exam questions or university IP.
+To mitigate this, StudyPilot executes a mandatory, multi-step pipeline for every document upload **before** sending text to external LLM endpoints:
 
-### D.1.2 LLM Privacy Agreement
-Groq API is utilized as our processing sub-processor. We must explicitly opt out of data training in our API contracts. User uploaded study materials are **never** used to train models.
+1. **In-Memory Streaming:** Read the file as a binary stream directly into memory (Vercel Node.js Serverless runtime or FastAPI VM). **DO NOT** write the raw PDF file to persistent disk storage.
+2. **Local NER Masking:** Execute a local Named Entity Recognition (NER) model (e.g., Presidio Analyzer) on the extracted text string. Locate and mask all occurrences of names, student IDs, email formats, and institution-specific identifiers. Replace detected PII with generic tags (e.g., `[NAME]`, `[ID]`).
+3. **Dependency-Free Extraction:** Run the dependency-free `unpdf` engine to extract structured, plain-text characters from the masked stream. Convert the extracted content into a lightweight markdown file (under the 4.5MB payload limit).
+4. **Abstract Extraction:** Prompt the LLM to extract only the abstract, structural syllabus headings, and practice question formatting. Discard the dense, copyright-protected body pages.
+5. **Memory Flush:** Store the anonymous structural metadata and vector embeddings in Supabase (`pgvector`). Immediately flush the local server memory buffer, leaving zero footprint of the original PDF document.
 
----
+## D.2 Copyright Infringement Protections
 
-## D.2 Data Portability & The Forgetting Curve
-When a user requests a GDPR data export, they receive a JSON payload containing:
-- Their exact Spaced Repetition schedule.
-- Their active recall success rates per topic.
-- Their sleep correlation data.
-This ensures complete portability of their academic profile.
+Uploading copyrighted academic articles or textbook chapters to generative AI tools constitutes unauthorized "republishing."
+
+StudyPilot explicitly prohibits the upload of full-text copyrighted books or licensed journal articles. The platform restricts processing to open-access creative commons documents, student-authored notes, or requires users to provide public links (e.g., DOIs or library portal links) rather than direct file uploads.
 
 
 # PART E: UI/UX DESIGN SYSTEM (The Academic OS)
@@ -447,40 +441,38 @@ This is the most critical UI component. It replaces the "End Session" button.
 - We remove all countdown visual stress (no ticking numbers). Focus is entirely on the *content* of the screen, not the clock.
 
 
-# PART F: IMPLEMENTATION ROADMAP (10-Week MVP)
+# PART F: IMPLEMENTATION ROADMAP (10-Week Enterprise MVP)
 
-Building a truly robust AI-Powered Active Recall Platform with offline-first capabilities requires careful engineering. We have adjusted the timeline to a realistic **10-week engineering sprint** focused on prompt validation, data integrity, and fallback mechanisms.
+Building a truly robust AI-Powered Active Recall Platform with enterprise-grade compliance and pgvector infrastructure requires a **10-week engineering sprint**.
 
 ## Immediate Prerequisites (Before Week 1)
-- **Dataset Collection:** Gather 20+ past exams from various disciplines (STEM, Humanities) to test generalization.
-- **Prompt Validation:** Run all exams through Groq. Measure Precision (topics extracted that appear) and Recall (topics that appear but weren't extracted). Target F1 > 0.85.
+- **Dataset Collection:** Gather 20+ past exams from various disciplines to test generalization.
+- **Prompt Validation:** Run all exams through Groq. Target F1 > 0.85.
 
 ---
 
-## Phase 1: Foundation (Weeks 1-2)
+## Phase 1: Foundation & Compliance (Weeks 1-2)
 - Next.js + Supabase Auth.
-- PDF upload component with drag-and-drop UI.
-- Test Groq extraction on the 20+ real exams.
+- Implement `pgvector` SQL migrations.
+- **Critical:** Build the 5-step in-memory PII Sanitization Pipeline using `unpdf` and local NER (Presidio). Ensure raw PDFs never touch persistent disk storage.
 
-## Phase 2: Topic Extraction & Fallbacks (Weeks 3-4)
-- Finalize Groq Prompt engineering (expecting 5-10 iterations).
-- Build the async queue for PDF processing.
-- **Critical:** Implement the `tesseract.js` OCR fallback for scanned, image-based exams.
+## Phase 2: Topic Extraction & Knowledge Graphs (Weeks 3-4)
+- Finalize Groq Prompt engineering using the Vercel AI SDK to bypass Edge constraints.
+- Map extracted topics into the `exam_topics` table, utilizing `parent_topic_id` to build semantic Directed Acyclic Graphs (DAGs).
 
-## Phase 3: Active Recall Engine (Weeks 5-6)
+## Phase 3: Active Recall Engine & Trajectory Logging (Weeks 5-6)
 - Build the template-based question generation engine.
-- Implement keyword grading for immediate offline feedback (handles 80% of use cases).
-- Integrate the `MiniLM` offline embedding model for semantic similarity grading.
+- Implement multi-dimensional rubric grading (Comprehensiveness, Accuracy, Coherence).
+- Log all LLM evaluations to the `agent_trajectory_logs` table for auditing.
 
-## Phase 4: Spaced Repetition & Notifications (Weeks 7-8)
-- Implement the SM-2 Spaced Repetition mathematical algorithm.
-- Build the VAPID Web Push notification architecture and Server Cron Jobs.
-- Dashboard analytics (using Recharts).
+## Phase 4: Dynamic Spaced Repetition (Weeks 7-8)
+- Implement the advanced mathematical Spaced Repetition algorithm factoring Response Time ($T$), Sleep ($S$), and Rubric Score ($R$).
+- Build VAPID Web Push notifications.
 
-## Phase 5: Crisis Mode & Polish (Weeks 9-10)
-- Build the Academic Triage logic (dropping low-weight topics).
-- Implement the Sleep lock mechanism.
-- PWA testing across iOS, Android, and Desktop browsers. Performance optimization.
+## Phase 5: Deep Work Polish (Weeks 9-10)
+- Implement the Deep Work Daily Schedule UI.
+- Implement the Sleep lock mechanism and dynamic priority scaling.
+- PWA testing across iOS, Android, and Desktop browsers.
 
 
 # PART G: PRICING & MONETIZATION STRATEGY (Donation-Only)
@@ -558,41 +550,38 @@ Students will Venmo you $5 when your app saves their grade. Professors will find
 We don't need to ask for money. We need to build something worth paying for, then let people decide.
 
 
-# PART H: EXAM CRISIS MODE (V3 Implementation)
+# PART H: DYNAMIC EXAM STRATEGY
 
-## 1. The Brutal Truth About Crisis Mode
+## 1. Dynamic Priority Score (Adjusted for Sleep Depletion)
 
-In previous versions, "Crisis Mode" was a timer with red alarms. As the "A-Student Blueprint" review pointed out, **a timer won't save you 24 hours before an exam.** Only high-yield active recall can save you.
+A static priority formula based solely on exam weight is pedagogically flawed because it fails to account for the student’s actual capacity for memory consolidation. Sleep deprivation severely impairs cognitive retention and active recall performance. 
+
+The scheduling engine must scale down the priority index of highly complex tasks when the student is sleep-deprived, shifting focus to lower-difficulty reviews or prompting recovery.
+
+**The Advanced Priority Formula:**
+
+$$Priority_{adj} = \left( (Exam Weight \times 2) + Lecture Hours \right) \times \left( \frac{Sleep Hours}{8.0} \right)^2$$
+
+Where $Sleep Hours$ represents the value captured during the morning onboarding slider, capped at 8.0 hours. 
+
+**Example:** If a student logs only 5.0 hours of sleep, their effective prioritization index scales down by approximately 60%, automatically realigning the daily planner away from heavy new topics to lighter, consolidated practice problems to prevent cognitive burnout.
+
+---
 
 ## 2. Crisis Mode Protocol (The 24-Hour Save)
 
-When a student clicks the "Crisis Mode" button (indicating an exam is <48 hours away), StudyPilot initiates an extreme academic triage protocol.
-
 ### Step 1: The Triage Cut
-- The AI completely drops all topics that have less than a 10% exam weight.
+- The AI dynamically calculates the $Priority_{adj}$.
 - The UI brutally informs the student: *"You do not have time to learn Thermodynamics. We are abandoning it. Focus 100% on Electricity (37% weight) to pass."*
 
-### Step 2: Pure Active Recall (No Reading Allowed)
-- Passive reading is banned. 
-- Crisis Mode locks the UI into a pure flashcard/practice problem interface. 
-- The user is bombarded with AI-generated practice questions specifically targeting their "High-Weight / Low-Confidence" topics.
+### Step 2: Pure Active Recall
+- Passive reading is banned. Crisis Mode locks the UI into a pure flashcard/practice problem interface. 
+- All failures are logged aggressively to adjust the $Priority_{adj}$ graph.
 
 ### Step 3: The Hard Sleep Stop
 - 10:00 PM the night before the exam.
 - The app locks the active recall engine.
 - **Message:** *"Studying all night actively destroys your retrieval ability. You will score 20% lower tomorrow if you don't sleep right now. Go to bed."*
-- If the user overrides it, the app explicitly logs the failure and predicts a grade penalty.
-
----
-
-## 3. The 7-Day Protocol Tracker
-
-For students starting a week out, the Dashboard transforms into the 7-Day Checklist:
-
-- `[ ]` **Day 7:** Take full practice exam (Upload results to StudyPilot for weak-spot analysis)
-- `[ ]` **Day 6-4:** Targeted Active Recall on weak spots only
-- `[ ]` **Day 3-2:** No new material. Re-test missed practice questions.
-- `[ ]` **Day 1:** Light review. Sleep 8+ hours.
 
 
 # PART I: OFFLINE AI ARCHITECTURE & FEASIBILITY
@@ -817,47 +806,40 @@ You're building a study system, not a chatbot. Small models are actually BETTER 
 **Build offline-first with 80MB embeddings, use cloud only for the one-time exam analysis.**
 
 
-# PART J: TECHNICAL IMPLEMENTATION DETAILS
+# PART J: TECHNICAL IMPLEMENTATION DETAILS (Algorithms & Edge Constraints)
 
-This section outlines the exact technical solutions to the most complex architectural challenges in StudyPilot V3.
+This section outlines the exact technical solutions to the most complex architectural challenges in StudyPilot V4.
 
-## J.1 The PDF Text Extraction Pipeline (OCR Fallback)
+## J.1 Vercel Edge Runtime & Streaming Fallbacks
 
-Relying solely on `pdf-parse` will fail on older, scanned university exams. StudyPilot utilizes a layered extraction pipeline.
-
-```typescript
-// utils/pdf-extractor.ts
-import pdfParse from 'pdf-parse';
-import { createWorker } from 'tesseract.js';
-
-async function extractPDFText(buffer: Buffer): Promise<string> {
-  // Try text extraction first (fast, free)
-  try {
-    const data = await pdfParse(buffer);
-    if (data.text.length > 500 && !hasGarbledText(data.text)) {
-      return data.text;
-    }
-  } catch (e) {
-    console.log('Text extraction failed, falling back to OCR');
-  }
-  
-  // Fallback to OCR for scanned PDFs (runs locally)
-  const worker = await createWorker('eng');
-  const { data: { text } } = await worker.recognize(buffer);
-  await worker.terminate();
-  
-  return text;
-}
-
-function hasGarbledText(text: string): boolean {
-  const specialCharRatio = (text.match(/[^a-zA-Z0-9\s]/g) || []).length / text.length;
-  return specialCharRatio > 0.3;
-}
-```
+To bypass the 15-second serverless execution limits and 4.5MB payload limits on Vercel, all long-running orchestrations must be moved to asynchronous background jobs (or GCP/AWS VMs), while the Next.js Edge Runtime is reserved strictly for streaming the **Vercel AI SDK**. `LangChain JS` is explicitly banned from this codebase.
 
 ---
 
-## J.2 The Groq Prompt Engineering (Core Extractor)
+## J.2 Advanced Spaced Repetition Algorithm
+
+The basic SM-2 interval multiplier is modified to calculate the next review date based on a combination of retrieval response speed, three-tier rubric scores, and physical rest metrics.
+
+Let the next review interval ($I_{n+1}$, in days) be calculated as:
+$$I_{n+1} = I_n \times EF \times \phi(R, S, T)$$
+
+Where:
+- $I_n$ is the current review interval (minimum 1 day).
+- $EF$ is the Easiness Factor of the topic, calibrated between 1.3 and 2.5.
+- $\phi(R, S, T)$ is the dynamic cognitive modulation function defined as:
+  
+  $$\phi(R, S, T) = \left( \frac{R}{100} \right) \times \left( \frac{S}{8.0} \right) \times \left( 1.0 - \min\left(0.3, \frac{T}{60000}\right) \right)$$
+
+Where:
+- $R$ is the final evaluation score (0 - 100) provided by the LLM grading ensemble.
+- $S$ is the sleep duration (0 - 12 hours) from the previous night.
+- $T$ is the response time in milliseconds. Slower response times ($T > 20,000$ ms) indicate retrieval difficulty.
+
+**Result:** If a student achieves a high accuracy score ($R = 90$) but did so with extreme hesitation ($T = 45,000$ ms) under sleep deprivation ($S = 5.5$ hours), the interval multiplier $\phi$ automatically decreases below 1.0. This forces an early review of the concept.
+
+---
+
+## J.3 The Groq Prompt Engineering (Core Extractor)
 
 The prompt that parses the exam is the most critical code in the application. It must extract `keywords` so that offline local models can generate questions without needing the cloud.
 
@@ -866,7 +848,7 @@ export const EXAM_ANALYSIS_PROMPT = `
 You are analyzing a university exam paper. Extract topics that appear in questions.
 
 Rules:
-1. A "topic" is a specific concept (e.g., "Newton's Second Law", not "Physics")
+1. A "topic" is a specific concept (e.g., "Newton's Second Law")
 2. Count how many questions reference each topic
 3. Estimate exam weight percentage based on points per question
 4. Return ONLY valid JSON, no explanation
@@ -877,7 +859,7 @@ Output format:
     {
       "name": "string",
       "questionCount": number,
-      "estimatedWeight": number (0-100),
+      "estimatedWeight": number,
       "keywords": ["string"] // 3-5 keywords for future offline retrieval/grading
     }
   ]
@@ -886,154 +868,6 @@ Output format:
 Exam text:
 {{EXAM_TEXT}}
 `;
-```
-
----
-
-## J.3 Spaced Repetition Algorithm (SM-2 Variant)
-
-```typescript
-interface ReviewResult {
-  quality: 0 | 1 | 2 | 3 | 4 | 5; // 0=complete blackout, 5=perfect recall
-}
-
-interface FlashcardState {
-  repetitions: number;    
-  easeFactor: number;     // Multiplier for interval (starts at 2.5)
-  interval: number;       // Days until next review
-}
-
-export function calculateNextReview(current: FlashcardState, result: ReviewResult): FlashcardState {
-  let { repetitions, easeFactor, interval } = current;
-  
-  // Failed recall
-  if (result.quality < 3) {
-    return { repetitions: 0, easeFactor, interval: 1 };
-  }
-  
-  // Successful recall
-  if (repetitions === 0) interval = 1;
-  else if (repetitions === 1) interval = 6;
-  else interval = Math.round(interval * easeFactor);
-  
-  const newEaseFactor = easeFactor + (0.1 - (5 - result.quality) * (0.08 + (5 - result.quality) * 0.02));
-  
-  return {
-    repetitions: repetitions + 1,
-    easeFactor: Math.max(1.3, newEaseFactor),
-    interval: Math.min(interval, 365)
-  };
-}
-```
-
----
-
-## J.4 Offline Model Loading Strategy (IndexedDB)
-
-The 80MB `MiniLM` model must be downloaded seamlessly in the background.
-
-```typescript
-class ModelManager {
-  private modelStatus: 'unloaded' | 'downloading' | 'ready' | 'failed' = 'unloaded';
-  
-  async ensureModel(): Promise<boolean> {
-    const cached = await caches.open('studypilot-models');
-    const response = await cached.match('/models/minilm.bin');
-    if (response) {
-      this.modelStatus = 'ready';
-      return true;
-    }
-    this.downloadInBackground();
-    return false; // Fallback to keyword templates while downloading
-  }
-  
-  private async downloadInBackground() {
-    this.modelStatus = 'downloading';
-    // Show non-intrusive UI progress
-    const response = await fetch('https://cdn.studypilot.com/models/minilm-v2.bin');
-    const cache = await caches.open('studypilot-models');
-    await cache.put('/models/minilm.bin', response);
-    this.modelStatus = 'ready';
-  }
-}
-```
-
----
-
-## J.5 Web Push Notifications (VAPID + Cron)
-
-```typescript
-// app/api/push/subscribe/route.ts
-import webpush from 'web-push';
-
-webpush.setVapidDetails(
-  'mailto:admin@studypilot.com',
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
-
-// Scheduled function (runs daily via Vercel Cron Jobs)
-export async function sendDailyReminders() {
-  const dueTopics = await db.exam_topics.findMany({
-    where: { next_review_date: { lte: new Date() }, user: { push_enabled: true } }
-  });
-  
-  for (const topic of dueTopics) {
-    await webpush.sendNotification(
-      topic.user.pushSubscription,
-      JSON.stringify({
-        title: 'Time to Review!',
-        body: `Your spaced repetition for ${topic.topic_name} is due.`,
-        icon: '/icon-192.png',
-        data: { topicId: topic.id }
-      })
-    );
-  }
-}
-```
-
----
-
-## J.6 Complete Architecture Data Flow
-
-```mermaid
-graph TB
-    subgraph "Client (Browser/PWA)"
-        UI[React Components]
-        OfflineModels[IndexedDB: MiniLM 80MB]
-        Templates[Local: Question Templates]
-        SW[Service Worker]
-    end
-    
-    subgraph "Edge/Vercel"
-        API[Next.js API Routes]
-        Queue[Async Job Queue]
-        PDFParser[PDF Extractor + Tesseract OCR]
-    end
-    
-    subgraph "Cloud Services"
-        Groq[Groq API - Mixtral 8x7B]
-        Supabase[(Supabase)]
-        Blob[Vercel Blob - Temp Storage]
-    end
-    
-    UI -->|Upload PDF| API
-    API -->|Store temp| Blob
-    Blob -->|Extract text| PDFParser
-    PDFParser -->|Send for analysis| Groq
-    Groq -->|Topics JSON| API
-    API -->|Store metadata| Supabase
-    
-    UI -->|Generate questions| Templates
-    UI -->|Optional upgrade| OfflineModels
-    
-    UI -->|Log session| API
-    API -->|Queue grading| Queue
-    Queue -->|Semantic| OfflineModels
-    Queue -->|Fallback| Groq
-    
-    SW -->|Push reminders| UI
-    Supabase -->|Due topics| SW
 ```
 
 

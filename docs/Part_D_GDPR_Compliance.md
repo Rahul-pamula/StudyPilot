@@ -1,23 +1,21 @@
-# PART D: GDPR COMPLIANCE & PRIVACY (PDF Handling)
+# PART D: GDPR COMPLIANCE & PII SANITIZATION PIPELINE
 
-## D.1 PDF Data Privacy Model
+## D.1 Step-by-Step Document Sanitization Pipeline
 
-The core of StudyPilot V3 is the **AI Past Exam Analyzer**. This requires users to upload potentially sensitive university documents (past exam papers, syllabi, lecture slides).
+When students upload past exams, homework papers, and private course slides, these documents regularly contain sensitive Personally Identifiable Information (PII) including student names, email addresses, professor contact details, and student ID numbers. 
 
-### D.1.1 Zero-Retention Document Processing
-To comply with GDPR and university academic integrity policies, we enforce strict data handling for uploaded files:
-1. **No Permanent Storage:** Uploaded PDFs are parsed entirely in memory using Next.js Serverless Functions (or stored ephemerally in `/tmp`).
-2. **Immediate Destruction:** Once the text is extracted and sent to the Groq API for 80/20 analysis, the original PDF and the raw extracted text are permanently deleted from the server.
-3. **Database Storage:** The database only stores the *derived metadata* (e.g., Topic: "Thermodynamics", Frequency: 12), never the actual exam questions or university IP.
+Under GDPR and FERPA, sending this un-sanitized data to external third-party API providers like Groq violates strict compliance standards.
 
-### D.1.2 LLM Privacy Agreement
-Groq API is utilized as our processing sub-processor. We must explicitly opt out of data training in our API contracts. User uploaded study materials are **never** used to train models.
+To mitigate this, StudyPilot executes a mandatory, multi-step pipeline for every document upload **before** sending text to external LLM endpoints:
 
----
+1. **In-Memory Streaming:** Read the file as a binary stream directly into memory (Vercel Node.js Serverless runtime or FastAPI VM). **DO NOT** write the raw PDF file to persistent disk storage.
+2. **Local NER Masking:** Execute a local Named Entity Recognition (NER) model (e.g., Presidio Analyzer) on the extracted text string. Locate and mask all occurrences of names, student IDs, email formats, and institution-specific identifiers. Replace detected PII with generic tags (e.g., `[NAME]`, `[ID]`).
+3. **Dependency-Free Extraction:** Run the dependency-free `unpdf` engine to extract structured, plain-text characters from the masked stream. Convert the extracted content into a lightweight markdown file (under the 4.5MB payload limit).
+4. **Abstract Extraction:** Prompt the LLM to extract only the abstract, structural syllabus headings, and practice question formatting. Discard the dense, copyright-protected body pages.
+5. **Memory Flush:** Store the anonymous structural metadata and vector embeddings in Supabase (`pgvector`). Immediately flush the local server memory buffer, leaving zero footprint of the original PDF document.
 
-## D.2 Data Portability & The Forgetting Curve
-When a user requests a GDPR data export, they receive a JSON payload containing:
-- Their exact Spaced Repetition schedule.
-- Their active recall success rates per topic.
-- Their sleep correlation data.
-This ensures complete portability of their academic profile.
+## D.2 Copyright Infringement Protections
+
+Uploading copyrighted academic articles or textbook chapters to generative AI tools constitutes unauthorized "republishing."
+
+StudyPilot explicitly prohibits the upload of full-text copyrighted books or licensed journal articles. The platform restricts processing to open-access creative commons documents, student-authored notes, or requires users to provide public links (e.g., DOIs or library portal links) rather than direct file uploads.
