@@ -1,91 +1,40 @@
-# PART E: UI/UX DESIGN SYSTEM (Mobile-First PWA)
+# PART E: UI/UX DESIGN SYSTEM (Adaptive PWA)
 
-## E.1 Design Tokens
+## E.1 Responsive Navigation Paradigms
 
-```css
-/* tailwind.config.js extended */
-module.exports = {
-  theme: {
-    extend: {
-      colors: {
-        primary: {
-          50: '#eff6ff',
-          500: '#3b82f6',
-          900: '#1e3a8a',
-        },
-        accent: {
-          green: '#10b981',
-          red: '#ef4444',
-          yellow: '#f59e0b',
-        }
-      },
-      animation: {
-        'slide-up': 'slideUp 0.3s ease-out',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Cal Sans', 'Inter', 'sans-serif'],
-      }
-    }
-  }
-};
-```
+A critical flaw in naive mobile-first design is assuming mobile layouts (like bottom tab bars) work well on desktop. Desktop users expect standard productivity app layouts.
 
-## E.2 Mobile-First Layout Patterns
+StudyPilot adapts its navigation based on the device viewport:
 
-Since StudyPilot is a Progressive Web App, the primary interface must feel like a native mobile application.
+### 1. Mobile (`< 768px`)
+- **Bottom Tab Navigation:** Ergonomic for thumbs. (Timer | Crisis | Logs | Profile)
+- Safe area padding for iOS home indicator (`pb-20`).
 
-### Bottom Tab Navigation (Mobile: `< 768px`)
-- A fixed bottom bar with 4 icons: `Timer | Crisis | Log | Profile`
-- Includes `pb-20` safe area padding so content doesn't get hidden behind the iOS home indicator.
+### 2. Tablet (`768px - 1024px`)
+- **Top Navigation:** Primary links move to a standard top header.
+- **Floating Action Button (FAB):** For starting quick timer sessions.
 
-### Sidebar Navigation (Desktop: `>= 768px`)
-- Using Tailwind's `md:flex`, the bottom navigation automatically converts into a persistent left-hand sidebar for laptop users.
+### 3. Desktop (`> 1024px`)
+- **Left Sidebar:** The standard paradigm for productivity web apps. Allows for deeper navigation trees and better use of widescreen real estate.
 
-## E.3 Component Library (Custom)
+---
 
-### Focus Score Ring
+## E.2 The Psychology of UI Feedback
+
+### Positive Reinforcement 
+In previous designs, "Crisis Mode" relied on punitive audio (loud beeps) to force focus. This is actively harmful to student mental health and triggers anxiety.
+
+**The Fix:** We exclusively use positive reinforcement. 
+- *Instead of:* "You left the tab! BEEP!"
+- *We use:* "Great job staying focused for 25 minutes! +5 Focus Points added to your daily score."
+
+### Beautiful Toast Notifications
 ```tsx
-// FocusRing.tsx - Animated circular progress
-const FocusRing = ({ score, size = 120 }: { score: number; size?: number }) => {
-  const circumference = 2 * Math.PI * 45;
-  const offset = circumference - (score / 100) * circumference;
-  
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg className="transform -rotate-90" width={size} height={size}>
-        <circle
-          cx={size/2} cy={size/2} r="45"
-          stroke="#2d2d2d" strokeWidth="8" fill="none"
-        />
-        <circle
-          cx={size/2} cy={size/2} r="45"
-          stroke="url(#gradient)" strokeWidth="8"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          fill="none"
-        >
-          <animate attributeName="stroke-dashoffset" from={circumference} to={offset} dur="1s" />
-        </circle>
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-bold">{score}</span>
-        <span className="text-xs text-gray-400">Focus Score</span>
-      </div>
-    </div>
-  );
-};
-```
-
-### Toast Notifications (Beautiful)
-```tsx
-// Custom toast with slide animation
+// Positive reinforcement toast
 toast.success({
-  title: "🎉 Study session complete!",
-  description: "You focused for 50 minutes. Time for a break!",
+  title: "🎉 Deep Work Achieved!",
+  description: "You crushed that Pomodoro session.",
   duration: 4000,
-  icon: <Rocket className="text-green-500" />
+  icon: <Sparkles className="text-yellow-400" />
 });
 ```

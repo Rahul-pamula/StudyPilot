@@ -1,115 +1,60 @@
-# PART B: AUTHENTICATION & ONBOARDING (LLD)
+# PART B: AUTHENTICATION & DATABASE SCHEMA (LLD)
 
-## B.1 Authentication Flow
+## B.1 Database Schema: Streak Integrity
 
-### B.1.1 User Journey
+A critical flaw in gamification systems is relying on local storage or mutable integer counters for streaks. If a user clears their Safari history, a local streak is destroyed. If multiple devices update an integer simultaneously, race conditions occur.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant PWA as Progressive Web App
-    participant Supabase as Supabase Auth
-    
-    User->>PWA: Opens Web App
-    PWA->>PWA: Check Local Storage Token
-    
-    alt No Token / Expired
-        PWA->>User: Show Login Screen
-        User->>PWA: Click "Google Sign In"
-        PWA->>Supabase: OAuth Redirect
-        Supabase->>User: Google Consent
-        User->>Supabase: Approve
-        Supabase->>PWA: Redirect + Session Token
-        PWA->>User: Redirect to Onboarding
-    else Has Valid Token
-        PWA->>User: Show Dashboard
-    end
-```
-
-### B.1.2 Database Schema (Auth)
+**Solution:** The database stores absolute timestamps, and streaks are calculated on read.
 
 ```sql
--- Supabase Auth manages: users, identities, sessions
--- We only store basic non-sensitive information in the cloud
-
+-- Profiles table for streak integrity
 CREATE TABLE public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email VARCHAR(255) NOT NULL,
     full_name VARCHAR(100),
     avatar_url TEXT,
-    study_streak INT DEFAULT 0,
+    
+    -- Streak Integrity Fields
+    last_study_date DATE,
+    daily_goal_hit BOOLEAN DEFAULT false,
+    streak_version INT DEFAULT 1, -- For optimistic concurrency control
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-
--- Policies
-CREATE POLICY "Users can view own profile"
-    ON profiles FOR SELECT USING (auth.uid() = id);
-    
-CREATE POLICY "Users can update own profile"
-    ON profiles FOR UPDATE USING (auth.uid() = id);
 ```
 
 ---
 
-## B.2 Onboarding Flow (4-Step)
+## B.2 Authentication Flow
 
-### Step 1: Welcome
-```typescript
-// OnboardingStep1.tsx
-const Step1 = () => (
-  <div className="space-y-6 text-center">
-    <motion.div animate={{ scale: [0.9, 1] }} className="text-6xl">🎓</motion.div>
-    <h1 className="text-3xl font-bold">Welcome to StudyPilot</h1>
-    <p className="text-gray-400">The timer that builds discipline without spying on you.</p>
+StudyPilot uses Supabase Auth (Google OAuth + Email Magic Links).
+
+Because Supabase Auth relies on secure, HTTP-only cookies to maintain session state, and because StudyPilot operates in jurisdictions covered by the ePrivacy Directive (GDPR), **explicit cookie consent is required during onboarding.**
+
+### B.2.1 Onboarding & Web Push Implementation
+
+Web Push notifications are not a magic bullet. They require explicit VAPID key architecture and careful permission prompting.
+
+**The Strategy:** Browsers only allow an app to request Notification permissions *once*. If the user clicks "Deny", they must dig into browser settings to undo it. Therefore, StudyPilot uses a "Soft Prompt" first.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant App as StudyPilot UI
+    participant Browser as Browser API
     
-    <Button onClick={nextStep}>Continue →</Button>
-  </div>
-);
-```
-
-### Step 2: Study Context
-```typescript
-// OnboardingStep2.tsx
-const studyLevels = [
-  { value: 'high_school', label: '🏫 High School', color: '#10B981' },
-  { value: 'undergrad', label: '📚 Undergraduate', color: '#3B82F6' },
-  { value: 'graduate', label: '🎓 Graduate', color: '#8B5CF6' }
-];
-
-<Select options={studyLevels} placeholder="Select your level" />
-<Textarea placeholder="What's your biggest study challenge?" />
-```
-
-### Step 3: Commitment & Notifications
-```typescript
-// OnboardingStep3.tsx - Requesting PWA capabilities
-const requestNotifications = async () => {
-  if ('Notification' in window) {
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      toast.success("Alerts enabled!");
-    }
-  }
-};
-
-<div className="space-y-4">
-  <p>Enable browser notifications to hear the timer ring when you are in another tab.</p>
-  <Button onClick={requestNotifications}>Enable Notifications 🔔</Button>
-</div>
-```
-
-### Step 4: Add to Home Screen (PWA Hook)
-```typescript
-// OnboardingStep4.tsx
-<div className="text-center space-y-4">
-  <h2>Install StudyPilot</h2>
-  <p>For the best experience, add StudyPilot to your home screen.</p>
-  <div className="bg-gray-800 p-4 rounded-lg">
-    <p className="text-sm">Tap the <b>Share</b> icon below and select <b>Add to Home Screen</b>.</p>
-  </div>
-  <Button onClick={completeOnboarding}>Start First Session</Button>
-</div>
+    App->>User: Soft Prompt: "Enable notifications to hear the timer ring?"
+    alt User clicks "Not Now"
+        App->>App: Save preference, don't ask Browser
+    else User clicks "Yes, Enable"
+        App->>Browser: Notification.requestPermission()
+        Browser->>User: Hard OS Prompt
+        User->>Browser: Allow
+        Browser->>App: Granted
+        App->>App: Register Service Worker Push Manager
+    end
 ```

@@ -1,84 +1,24 @@
-# PART G: PRICING & MONETIZATION STRATEGY
+# PART G: PRICING & CLOUD INFRASTRUCTURE COSTS
 
 ## 1. Core Principle: 100% Free for Students
 **StudyPilot will always be free for students.** No paywalls, no premium tiers, no credit card required.
 
-### 1.1 Target User Confirmation
-
-| User Type | Payment Status | Reasoning |
-|-----------|----------------|------------|
-| Students (any level) | ❤️ **100% Free** | Core mission: help students succeed |
-| Non-students (professionals) | 💰 Optional donation | If they want to support the project |
-| Educational institutions | 💰 Paid licenses | Bulk deployment, admin dashboard |
-
 ---
 
-## 2. Sustainability Model (No Student Fees)
+## 2. Infrastructure Cost Reality Check
 
-### 2.1 Revenue Sources (Not from students)
+Previous estimates assumed a "$0/month" cost by relying on free tiers. This is unrealistic for a scaling application. We must architect for actual infrastructure limits.
 
-| Source | Model | Target |
-|--------|-------|--------|
-| **University Partnerships** | Annual license for campus-wide deployment | $5,000-50,000 per university |
-| **Corporate Wellness Programs** | Employee focus training (non-student) | $10/employee/month |
-| **Donations** | "Buy us a coffee" (optional, no features locked) | $5-20/user |
-| **Open Source Sponsors** | GitHub Sponsors, corporate backers | $1,000-10,000/month |
+### 2.1 Vercel (Frontend & Serverless APIs)
+- **The Limit:** The free tier offers 100GB of bandwidth and 6,000 build minutes.
+- **The Reality:** 1,000 active daily users pulling PWA assets will quickly approach the 100GB limit.
+- **The Plan:** We will upgrade to Vercel Pro ($20/mo) immediately upon hitting 500 DAU to ensure uptime and reliable serverless function execution.
 
-### 2.2 What Students Get for Free
+### 2.2 Supabase (PostgreSQL & Auth)
+- **The Limit:** The free tier offers 500MB database size and 2 active projects.
+- **The Reality:** Because we only store a single row per user in the `profiles` table (`last_study_date`), 500MB can easily support 100,000+ users.
+- **The Plan:** We will maintain the free tier for production, but must spin up a local Docker instance for staging, as the free tier restricts us to 2 active cloud projects.
 
-```text
-✅ Installable Mobile/Desktop PWA
-✅ Unlimited Pomodoro sessions
-✅ Exam Crisis Mode Planner
-✅ Topic prioritization engine
-✅ Panic button survival plans
-✅ All future features
-✅ No ads
-✅ Zero-Data Storage Privacy
-```
-
----
-
-## 3. University Partnership Model
-
-### 3.1 What Universities Pay For
-
-| Feature | Students (Free) | University (Paid) |
-|---------|----------------|-------------------|
-| Individual accounts | ✅ | ✅ |
-| Focus tracking | ✅ | ✅ |
-| Exam planning | ✅ | ✅ |
-| **Admin Dashboard** | ❌ | ✅ |
-| **Department Analytics** | ❌ | ✅ |
-| **SSO Integration** (Okta, Azure) | ❌ | ✅ |
-| **LMS Integration** (Canvas) | ❌ | ✅ |
-
----
-
-## 4. Cost Management & Transparency
-
-### Keeping Infrastructure Affordable
-By relying on `localStorage` for all granular data, our server costs are essentially zero.
-
-| Service | Monthly Cost (1,000 users) | Optimization |
-|---------|---------------------------|--------------|
-| **Supabase Auth & DB** | $0 (free tier) | We only store streaks |
-| **Next.js (Vercel)** | $0 (free tier) | Serverless functions |
-| **Groq LLM API** | $0 (free tier) | Fast inference for Crisis Mode |
-| **Total** | **$0/month** | Hyper-optimized edge architecture |
-
----
-
-## 5. Official StudyPilot Pledge
-
-```text
-# The StudyPilot Student Promise
-
-✅ We will never charge students.
-✅ We will never show ads to students.
-✅ We will never sell your data. (We don't even store it!)
-✅ We exist to help students succeed without financial barriers.
-
-Signed,
-The StudyPilot Team
-```
+### 2.3 Disaster Recovery Plan
+Because we are the data controllers, we cannot blindly rely on Supabase's uptime.
+- **Backup Strategy:** We will implement pg_dump backups to an external S3 bucket every 24 hours to ensure streak data is never permanently lost during a cloud outage.
