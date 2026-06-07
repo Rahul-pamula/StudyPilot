@@ -1,92 +1,116 @@
+<div align="center">
+
 # ✈️ StudyPilot
 
-StudyPilot is an AI-powered educational web application designed to help students optimize their learning experience. It combines a **technical chatbot**, a **multi-format notes summarizer**, and a **stress-adaptive study planner** in a custom-styled, premium light-themed interface.
+**Study Faster. Stress Less.**  
+*An AI-powered educational workspace designed to help students optimize their learning experience without the overwhelm.*
 
-The application operates seamlessly in both **online** (via the Groq API) and **offline** modes (falling back to local machine learning models and similarity-based algorithms). It is built with a modern decoupled architecture: a Next.js React frontend and a FastAPI backend.
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python)](https://python.org/)
 
-![Landing Page Hero](docs/screenshots/landing-hero.png)
-![Landing Page Features](docs/screenshots/landing-features.png)
-![Landing Page Benefits](docs/screenshots/landing-benefits.png)
+</div>
 
 ---
 
-## 🌟 Key Features
+<div align="center">
+  <img src="docs/screenshots/landing-hero.png" alt="StudyPilot Hero" width="800"/>
+  <br/><br/>
+  <img src="docs/screenshots/landing-features.png" alt="StudyPilot Features" width="800"/>
+  <br/><br/>
+  <img src="docs/screenshots/landing-benefits.png" alt="StudyPilot Benefits" width="800"/>
+  <br/><br/>
+  <img src="docs/screenshots/signin.png" alt="StudyPilot Sign In" width="800"/>
+</div>
 
-### 1. 💬 Ask Anything (Technical Chatbot)
+---
 
-![Chat UI](docs/screenshots/chat.png)
+## 🌟 Why StudyPilot?
+
+StudyPilot combines a **technical chatbot**, a **multi-format notes summarizer**, and a **stress-adaptive study planner** into a single, beautifully crafted premium interface. 
+
+It operates seamlessly in both **online** (via the Groq API) and **offline** modes (falling back to local ML models), ensuring you can study anywhere, anytime.
+
+---
+
+## ✨ Key Features
+
+### 💬 Ask Anything (Technical Chatbot)
+<div align="center"><img src="docs/screenshots/chat.png" alt="Chat UI" width="700"/></div>
 
 A chatbot helper tailored to Python, Data Structures & Algorithms (DSA), OOP, and Machine Learning.
 * **Smart Mode (Online):** Powered by the **Groq API** (`llama-3.3-70b-versatile`) to generate structured, markdown-rich answers with syntax-highlighted code blocks, lists, and tips.
 * **Offline Fallback:** Employs a local **TF-IDF + Cosine Similarity** model mapped against a pre-loaded knowledge base of 100+ common questions.
-* **Auto-Correction:** Automatically checks spelling typos in user queries using `difflib` before matching.
-* **Sentiment Analysis:** Monitors the student's emotional state using **NLTK's VADER Sentiment Analyzer**. If a student appears stressed, the UI gives supportive real-time micro-feedback.
+* **Sentiment Analysis:** Monitors your emotional state using **NLTK's VADER Sentiment Analyzer**, giving supportive real-time micro-feedback if you appear stressed.
 
-### 2. 📝 Notes Summarizer
+### 📝 Notes Summarizer
+<div align="center"><img src="docs/screenshots/summarizer.png" alt="Summarizer UI" width="700"/></div>
 
-![Notes Summarizer UI](docs/screenshots/summarizer.png)
-
-Allows students to paste long lecture slides, documents, or articles and receive structured summaries.
-* **Word Customization:** Customize the output length (between 10 to 1000 words).
+Turn long lecture slides, messy notes, or documents into structured clarity.
+* **Word Customization:** Easily control the output length (between 10 to 1000 words).
 * **Multiple Output Formats:** Formats summaries into *Plain Text*, *Bullet Points*, *Essay*, *Letter*, or *Email*.
-* **Local Fallback:** Uses Hugging Face's local transformer pipeline (`transformers` with `t5-small`) to generate summary chunks offline when API keys are absent.
+* **Local Fallback:** Uses Hugging Face's local transformer pipeline (`transformers` with `t5-small`) to generate summary chunks offline.
 
-### 3. 📅 Adaptive Study Planner
+### 📅 Adaptive Study Planner
+<div align="center"><img src="docs/screenshots/planner.png" alt="Planner UI" width="700"/></div>
 
-![Adaptive Planner UI](docs/screenshots/planner.png)
-
-A Pomodoro-style interactive study schedule that adapts dynamically to your mental state:
-* **Mood Check-in:** Processes how you are feeling (e.g., *stressed*, *tired*, *excited*) through sentiment analysis.
-* **Stress-Adaptive Intervals:**
-  * **Gentle Mode (High Stress):** 20 min focus + 10 min recovery breaks.
-  * **Mellow Mode (Mild Stress):** 25 min focus + 10 min breaks.
-  * **Classic Mode (Healthy/Motivated):** 25 min focus + 5 min breaks.
-* **Weak-Subject Weighting:** Prioritizes subjects by allocating double slots for your self-declared "Weak Subject".
+A Pomodoro-style interactive study schedule that adapts dynamically to your mental state.
+* **Mood Check-in:** Processes how you are feeling (e.g., *stressed*, *tired*, *excited*) before generating the plan.
+* **Stress-Adaptive Breaks:**
+  * 🧘 **Gentle Mode (High Stress):** 20 min focus + 10 min recovery breaks.
+  * 🍃 **Mellow Mode (Mild Stress):** 25 min focus + 10 min breaks.
+  * 🚀 **Classic Mode (Healthy/Motivated):** 25 min focus + 5 min breaks.
 * **Motivational Engine:** Delivers dynamic, mood-tailored quotes to push you through tough study sessions.
-
-### 4. 🔑 Authentication & Security
-
-![Sign In Page](docs/screenshots/signin.png)
-
-* **SQLite Database:** Local user records, chat history, planner schedules, and note summaries are saved safely.
-* **JWT Authentication:** Secure token-based authentication handles sessions seamlessly between the Next.js frontend and FastAPI backend.
-* **Password Security:** Credentials are encrypted using SHA-256 before database storage.
-* **OTP Verification:** Verification code emails are dispatched during signup and password recovery using Gmail's SMTP servers.
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Component | Technologies & Libraries |
+| Architecture Layer | Technologies & Libraries |
 | :--- | :--- |
-| **Frontend UI** | [Next.js](https://nextjs.org/) (App Router), [Tailwind CSS v4](https://tailwindcss.com/), Framer Motion, Lucide Icons |
+| **Frontend UI** | [Next.js 15](https://nextjs.org/), [Tailwind CSS v4](https://tailwindcss.com/), Framer Motion, Lucide Icons |
 | **Backend API** | [FastAPI](https://fastapi.tiangolo.com/), Uvicorn, Python-Jose (JWT) |
 | **Database** | [SQLite](https://www.sqlite.org/) |
-| **AI LLM Engine (Online)** | [Groq API](https://groq.com/) (`llama-3.3-70b-versatile`) |
-| **NLP & Local ML (Offline)** | `nltk` (VADER), `scikit-learn` (TF-IDF), `transformers` (T5-small via PyTorch), `difflib` |
+| **AI LLM Engine** | [Groq API](https://groq.com/) (`llama-3.3-70b-versatile`) |
+| **NLP & Local ML** | `nltk`, `scikit-learn`, `transformers` (T5-small), PyTorch |
 
 ---
 
-## 🚀 Installation & Setup
+## 🚀 Getting Started
 
-You can run StudyPilot using Docker (recommended) or natively.
+You can run StudyPilot using Docker (recommended for the easiest experience) or natively on your machine.
 
-### Method 1: Docker (Recommended)
-See [Docker Notes](docs/Docker_Notes.md) for full instructions.
+<details>
+<summary><b>🐳 Method 1: Docker Setup (Recommended)</b></summary>
 
-1. Ensure Docker Desktop is installed.
-2. Clone the repo and configure your `.env` inside `backend/`.
-3. Run: `docker compose up --build -d`
-4. Access the frontend at `http://localhost:3000` and API docs at `http://localhost:8000/docs`.
+<br/>
 
-### Method 2: Manual Setup
+*See [Docker Notes](docs/Docker_Notes.md) for full architectural documentation.*
 
-#### Prerequisites
-* Node.js v18+
-* Python 3.10+
-* Groq API Key & Gmail App Password (Optional but recommended for full features)
+1. Ensure **Docker Desktop** is installed and running.
+2. Clone the repository and configure your environment:
+   ```bash
+   git clone https://github.com/Rahul-pamula/StudyPilot.git
+   cd StudyPilot
+   ```
+3. Add your `.env` file inside the `backend/` directory (see Manual Setup below for variables).
+4. Build and start the containers:
+   ```bash
+   docker compose up --build -d
+   ```
+5. Access the app at `http://localhost:3000` and API docs at `http://localhost:8000/docs`.
 
-#### 1. Setup Backend
+</details>
+
+<details>
+<summary><b>💻 Method 2: Manual Local Setup</b></summary>
+
+<br/>
+
+**Prerequisites:** Node.js v18+ and Python 3.10+
+
+**1. Setup the FastAPI Backend**
 ```bash
 git clone https://github.com/Rahul-pamula/StudyPilot.git
 cd StudyPilot/backend
@@ -96,13 +120,17 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Create .env file (add GROQ_API_KEY, GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+# Create .env file with your credentials
+# GROQ_API_KEY=your_key_here
+# GMAIL_ADDRESS=your_email@gmail.com
+# GMAIL_APP_PASSWORD=your_app_password
+
 # Start the API
 uvicorn src.api.main:app --reload --port 8000
 ```
 
-#### 2. Setup Frontend
-In a new terminal:
+**2. Setup the Next.js Frontend**
+In a new terminal window:
 ```bash
 cd StudyPilot/frontend
 npm install
@@ -111,11 +139,11 @@ npm run dev
 
 Visit `http://localhost:3000` in your browser.
 
+</details>
+
 ---
 
-## 🎨 Theme & Visual Architecture
-StudyPilot features a modern, clean, and emotional SaaS design:
-* **Base styling:** Clean white backgrounds (`#FFFFFF`), subtle slate text colors, and premium blue-indigo gradients.
-* **Typography:** Inter/system sans-serif fonts natively integrated through Tailwind.
-* **Animations:** Smooth page transitions, fade-ins, and micro-interactions powered by Framer Motion.
-* **Component Architecture:** Decoupled React components (Cards, ChatBubbles, Navbars) built for responsiveness and speed.
+<div align="center">
+  <p><i>Made for real students, not perfect ones.</i></p>
+  <p><b>StudyPilot © 2025</b></p>
+</div>
