@@ -12,7 +12,7 @@ The architecture is designed as a distributed system with strict boundaries betw
 graph TD
     UI[Next.js Frontend UI] <--> |REST API| API[FastAPI Backend]
     
-    subedge Local Edge Processing
+    subgraph Local Edge Processing
         Daemon[Python Background Daemon] <--> LocalDB[(Local SQLite DB)]
     end
     
