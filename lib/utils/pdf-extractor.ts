@@ -30,6 +30,10 @@ export async function extractTextFromPDF(file: File): Promise<string> {
 export async function extractTextFromBuffer(buffer: ArrayBuffer): Promise<string> {
   const pdfjs = await import('pdfjs-dist')
 
+  if (typeof window !== 'undefined') {
+    pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+  }
+
   try {
     const pdf = await pdfjs.getDocument({ data: buffer }).promise
     let fullText = ''
